@@ -1,0 +1,343 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  AGENT
+  VIEWER
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ReservationStatus {
+  ACTIVE
+  RELEASED
+  CONVERTED
+  EXPIRED
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  FULFILLED
+  CANCELLED
+  NEEDS_HUMAN_REVIEW
+}
+
+enum ConversationChannel {
+  WEB
+  WHATSAPP
+  INSTAGRAM
+  SMS
+  ADMIN_TEST
+}
+
+enum MessageRole {
+  CUSTOMER
+  ASSISTANT
+  ADMIN
+  TOOL
+  SYSTEM
+}
+
+enum AuditAction {
+  PRODUCT_CREATED
+  PRODUCT_UPDATED
+  STOCK_ADJUSTED
+  RESERVATION_CREATED
+  RESERVATION_RELEASED
+  ORDER_CREATED
+  ORDER_UPDATED
+  HUMAN_TAKEOVER
+  TOOL_CALL_FAILED
+  REPORT_SENT
+  BILLING_UPDATED
+}
+
+model Business {
+  id                  String          @id @default(cuid())
+  name                String
+  slug                String          @unique
+  timezone            String          @default("UTC")
+  defaultCurrency     String          @default("USD")
+  supportEmail        String?
+  supportPhone        String?
+  lowStockThreshold   Int             @default(3)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  users               User[]
+  customers           Customer[]
+  products            Product[]
+  variants            ProductVariant[]
+  inventoryItems      InventoryItem[]
+  reservations        InventoryReservation[]
+  orders              Order[]
+  conversations       Conversation[]
+  unavailableRequests UnavailableProductRequest[]
+  reports             DailyReport[]
+  auditLogs           AuditLog[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  businessId   String
+  email        String
+  name         String?
+  role         UserRole  @default(ADMIN)
+  passwordHash String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, email])
+  @@index([businessId, role])
+}
+
+model Customer {
+  id            String         @id @default(cuid())
+  businessId    String
+  externalId    String?
+  name          String?
+  phone         String?
+  email         String?
+  defaultAddress String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  orders        Order[]
+
+  @@index([businessId, phone])
+  @@index([businessId, email])
+  @@index([businessId, externalId])
+}
+
+model Product {
+  id             String          @id @default(cuid())
+  businessId     String
+  name           String
+  description    String?
+  brand          String?
+  category       String?
+  status         ProductStatus   @default(ACTIVE)
+  tags           String[]        @default([])
+  searchKeywords String[]        @default([])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  business       Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  variants       ProductVariant[]
+  images         ProductImage[]
+  unavailableRequests UnavailableProductRequest[]
+
+  @@index([businessId, status])
+  @@index([businessId, category])
+  @@index([businessId, brand])
+}
+
+model ProductVariant {
+  id            String          @id @default(cuid())
+  businessId    String
+  productId     String
+  sku           String
+  title         String
+  barcode       String?
+  color         String?
+  size          String?
+  unitPriceCents Int
+  currency      String          @default("USD")
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  business      Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product       Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory     InventoryItem?
+  orderItems    OrderItem[]
+  reservations  InventoryReservation[]
+
+  @@unique([businessId, sku])
+  @@index([businessId, productId])
+  @@index([businessId, isActive])
+}
+
+model ProductImage {
+  id              String   @id @default(cuid())
+  businessId      String
+  productId       String
+  url             String
+  altText         String?
+  visibleText     String?
+  embeddingRef    String?
+  createdAt       DateTime @default(now())
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, productId])
+}
+
+model InventoryItem {
+  id              String          @id @default(cuid())
+  businessId      String
+  variantId       String          @unique
+  stockOnHand     Int             @default(0)
+  reorderPoint    Int             @default(3)
+  updatedAt       DateTime        @updatedAt
+  business        Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  variant         ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, stockOnHand])
+}
+
+model InventoryReservation {
+  id           String            @id @default(cuid())
+  businessId   String
+  variantId    String
+  customerId   String?
+  orderId      String?
+  quantity     Int
+  status       ReservationStatus @default(ACTIVE)
+  expiresAt    DateTime
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  variant      ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  order        Order?            @relation(fields: [orderId], references: [id])
+
+  @@index([businessId, variantId, status])
+  @@index([businessId, expiresAt])
+}
+
+model Order {
+  id              String                 @id @default(cuid())
+  businessId      String
+  customerId      String?
+  conversationId  String?
+  orderNumber     String
+  status          OrderStatus            @default(PENDING)
+  customerName    String?
+  customerPhone   String?
+  deliveryAddress String?
+  subtotalCents   Int                    @default(0)
+  currency        String                 @default("USD")
+  notes           String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  business        Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer        Customer?              @relation(fields: [customerId], references: [id])
+  conversation    Conversation?          @relation(fields: [conversationId], references: [id])
+  items           OrderItem[]
+  reservations    InventoryReservation[]
+
+  @@unique([businessId, orderNumber])
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
+}
+
+model OrderItem {
+  id             String          @id @default(cuid())
+  businessId     String
+  orderId        String
+  variantId      String
+  productName    String
+  variantTitle   String
+  sku            String
+  quantity       Int
+  unitPriceCents Int
+  currency       String          @default("USD")
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant        ProductVariant  @relation(fields: [variantId], references: [id])
+
+  @@index([businessId, orderId])
+  @@index([businessId, variantId])
+}
+
+model Conversation {
+  id           String              @id @default(cuid())
+  businessId   String
+  customerId   String?
+  channel      ConversationChannel @default(WEB)
+  externalThreadId String?
+  status       String              @default("OPEN")
+  handoffToHuman Boolean           @default(false)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  business     Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer     Customer?           @relation(fields: [customerId], references: [id])
+  messages     Message[]
+  orders       Order[]
+
+  @@index([businessId, channel])
+  @@index([businessId, externalThreadId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  businessId     String
+  conversationId String
+  role           MessageRole
+  content        String
+  imageUrl       String?
+  toolName       String?
+  toolPayload    Json?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, conversationId, createdAt])
+}
+
+model UnavailableProductRequest {
+  id             String    @id @default(cuid())
+  businessId     String
+  productId      String?
+  customerId     String?
+  rawQuery       String
+  normalizedName String?
+  requestedQty   Int       @default(1)
+  imageUrl       String?
+  createdAt      DateTime  @default(now())
+  business       Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product        Product?  @relation(fields: [productId], references: [id])
+
+  @@index([businessId, createdAt])
+  @@index([businessId, normalizedName])
+}
+
+model DailyReport {
+  id          String    @id @default(cuid())
+  businessId  String
+  reportDate  DateTime
+  summary     Json
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, reportDate])
+  @@index([businessId, createdAt])
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  businessId  String
+  actorType   String
+  actorId     String?
+  action      AuditAction
+  entityType  String?
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+  business    Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, action])
+  @@index([businessId, createdAt])
+}
+
