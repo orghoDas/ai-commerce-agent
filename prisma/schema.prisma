@@ -67,16 +67,16 @@ enum AuditAction {
 }
 
 model Business {
-  id                  String          @id @default(cuid())
+  id                  String                      @id @default(cuid())
   name                String
-  slug                String          @unique
-  timezone            String          @default("UTC")
-  defaultCurrency     String          @default("USD")
+  slug                String                      @unique
+  timezone            String                      @default("UTC")
+  defaultCurrency     String                      @default("USD")
   supportEmail        String?
   supportPhone        String?
-  lowStockThreshold   Int             @default(3)
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  lowStockThreshold   Int                         @default(3)
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
   users               User[]
   customers           Customer[]
   products            Product[]
@@ -91,33 +91,33 @@ model Business {
 }
 
 model User {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   businessId   String
   email        String
   name         String?
-  role         UserRole  @default(ADMIN)
+  role         UserRole @default(ADMIN)
   passwordHash String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@unique([businessId, email])
   @@index([businessId, role])
 }
 
 model Customer {
-  id            String         @id @default(cuid())
-  businessId    String
-  externalId    String?
-  name          String?
-  phone         String?
-  email         String?
+  id             String         @id @default(cuid())
+  businessId     String
+  externalId     String?
+  name           String?
+  phone          String?
+  email          String?
   defaultAddress String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
-  orders        Order[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  business       Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
+  orders         Order[]
 
   @@index([businessId, phone])
   @@index([businessId, email])
@@ -125,20 +125,20 @@ model Customer {
 }
 
 model Product {
-  id             String          @id @default(cuid())
-  businessId     String
-  name           String
-  description    String?
-  brand          String?
-  category       String?
-  status         ProductStatus   @default(ACTIVE)
-  tags           String[]        @default([])
-  searchKeywords String[]        @default([])
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  business       Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  variants       ProductVariant[]
-  images         ProductImage[]
+  id                  String                      @id @default(cuid())
+  businessId          String
+  name                String
+  description         String?
+  brand               String?
+  category            String?
+  status              ProductStatus               @default(ACTIVE)
+  tags                String[]                    @default([])
+  searchKeywords      String[]                    @default([])
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  business            Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  variants            ProductVariant[]
+  images              ProductImage[]
   unavailableRequests UnavailableProductRequest[]
 
   @@index([businessId, status])
@@ -147,24 +147,24 @@ model Product {
 }
 
 model ProductVariant {
-  id            String          @id @default(cuid())
-  businessId    String
-  productId     String
-  sku           String
-  title         String
-  barcode       String?
-  color         String?
-  size          String?
+  id             String                 @id @default(cuid())
+  businessId     String
+  productId      String
+  sku            String
+  title          String
+  barcode        String?
+  color          String?
+  size           String?
   unitPriceCents Int
-  currency      String          @default("USD")
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  business      Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  product       Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  inventory     InventoryItem?
-  orderItems    OrderItem[]
-  reservations  InventoryReservation[]
+  currency       String                 @default("USD")
+  isActive       Boolean                @default(true)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  business       Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product        Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory      InventoryItem?
+  orderItems     OrderItem[]
+  reservations   InventoryReservation[]
 
   @@unique([businessId, sku])
   @@index([businessId, productId])
@@ -172,46 +172,46 @@ model ProductVariant {
 }
 
 model ProductImage {
-  id              String   @id @default(cuid())
-  businessId      String
-  productId       String
-  url             String
-  altText         String?
-  visibleText     String?
-  embeddingRef    String?
-  createdAt       DateTime @default(now())
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  businessId   String
+  productId    String
+  url          String
+  altText      String?
+  visibleText  String?
+  embeddingRef String?
+  createdAt    DateTime @default(now())
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([businessId, productId])
 }
 
 model InventoryItem {
-  id              String          @id @default(cuid())
-  businessId      String
-  variantId       String          @unique
-  stockOnHand     Int             @default(0)
-  reorderPoint    Int             @default(3)
-  updatedAt       DateTime        @updatedAt
-  business        Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  variant         ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  id           String         @id @default(cuid())
+  businessId   String
+  variantId    String         @unique
+  stockOnHand  Int            @default(0)
+  reorderPoint Int            @default(3)
+  updatedAt    DateTime       @updatedAt
+  business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@index([businessId, stockOnHand])
 }
 
 model InventoryReservation {
-  id           String            @id @default(cuid())
-  businessId   String
-  variantId    String
-  customerId   String?
-  orderId      String?
-  quantity     Int
-  status       ReservationStatus @default(ACTIVE)
-  expiresAt    DateTime
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  variant      ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  order        Order?            @relation(fields: [orderId], references: [id])
+  id         String            @id @default(cuid())
+  businessId String
+  variantId  String
+  customerId String?
+  orderId    String?
+  quantity   Int
+  status     ReservationStatus @default(ACTIVE)
+  expiresAt  DateTime
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  business   Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  variant    ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  order      Order?            @relation(fields: [orderId], references: [id])
 
   @@index([businessId, variantId, status])
   @@index([businessId, expiresAt])
@@ -244,7 +244,7 @@ model Order {
 }
 
 model OrderItem {
-  id             String          @id @default(cuid())
+  id             String         @id @default(cuid())
   businessId     String
   orderId        String
   variantId      String
@@ -253,28 +253,28 @@ model OrderItem {
   sku            String
   quantity       Int
   unitPriceCents Int
-  currency       String          @default("USD")
-  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant        ProductVariant  @relation(fields: [variantId], references: [id])
+  currency       String         @default("USD")
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant        ProductVariant @relation(fields: [variantId], references: [id])
 
   @@index([businessId, orderId])
   @@index([businessId, variantId])
 }
 
 model Conversation {
-  id           String              @id @default(cuid())
-  businessId   String
-  customerId   String?
-  channel      ConversationChannel @default(WEB)
+  id               String              @id @default(cuid())
+  businessId       String
+  customerId       String?
+  channel          ConversationChannel @default(WEB)
   externalThreadId String?
-  status       String              @default("OPEN")
-  handoffToHuman Boolean           @default(false)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  business     Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customer     Customer?           @relation(fields: [customerId], references: [id])
-  messages     Message[]
-  orders       Order[]
+  status           String              @default("OPEN")
+  handoffToHuman   Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  business         Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer         Customer?           @relation(fields: [customerId], references: [id])
+  messages         Message[]
+  orders           Order[]
 
   @@index([businessId, channel])
   @@index([businessId, externalThreadId])
@@ -296,48 +296,47 @@ model Message {
 }
 
 model UnavailableProductRequest {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   businessId     String
   productId      String?
   customerId     String?
   rawQuery       String
   normalizedName String?
-  requestedQty   Int       @default(1)
+  requestedQty   Int      @default(1)
   imageUrl       String?
-  createdAt      DateTime  @default(now())
-  business       Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  product        Product?  @relation(fields: [productId], references: [id])
+  createdAt      DateTime @default(now())
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product        Product? @relation(fields: [productId], references: [id])
 
   @@index([businessId, createdAt])
   @@index([businessId, normalizedName])
 }
 
 model DailyReport {
-  id          String    @id @default(cuid())
-  businessId  String
-  reportDate  DateTime
-  summary     Json
-  sentAt      DateTime?
-  createdAt   DateTime  @default(now())
-  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id         String    @id @default(cuid())
+  businessId String
+  reportDate DateTime
+  summary    Json
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@unique([businessId, reportDate])
   @@index([businessId, createdAt])
 }
 
 model AuditLog {
-  id          String      @id @default(cuid())
-  businessId  String
-  actorType   String
-  actorId     String?
-  action      AuditAction
-  entityType  String?
-  entityId    String?
-  metadata    Json?
-  createdAt   DateTime    @default(now())
-  business    Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id         String      @id @default(cuid())
+  businessId String
+  actorType  String
+  actorId    String?
+  action     AuditAction
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+  business   Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([businessId, action])
   @@index([businessId, createdAt])
 }
-

@@ -25,5 +25,8 @@
     "prisma": "^6.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
   }
 }

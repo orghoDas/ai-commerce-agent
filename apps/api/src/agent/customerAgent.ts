@@ -1,8 +1,11 @@
+import type { Response } from "openai/resources/responses/responses";
 import { customerAgentSystemPrompt } from "./prompts.js";
 import { customerAgentTools } from "./toolSchemas.js";
 import { runCustomerTool } from "./toolRouter.js";
 import { defaultModel, openai } from "../integrations/openai.js";
 import { conversationService } from "../services/conversation.service.js";
+
+const MAX_TOOL_ROUNDS = 6;
 
 type CustomerAgentInput = {
   businessId: string;
@@ -29,28 +32,54 @@ export async function runCustomerAgent(input: CustomerAgentInput) {
     ? `Customer message: ${input.customerMessage}\nCustomer image URL: ${input.imageUrl}`
     : input.customerMessage;
 
-  const response = await openai.responses.create({
+  let response = await openai.responses.create({
     model: defaultModel,
     instructions: customerAgentSystemPrompt,
     input: userContent,
     tools: customerAgentTools
   });
 
-  // This file marks the orchestration boundary. In production, loop through
-  // function calls until the model returns a final answer.
-  const toolCalls = extractToolCalls(response);
-  for (const toolCall of toolCalls) {
-    const result = await runCustomerTool(
-      { businessId: input.businessId, conversationId: conversation.id },
-      toolCall
+  const executedToolCalls: CustomerToolCall[] = [];
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    const toolCalls = extractToolCalls(response);
+
+    if (toolCalls.length === 0) {
+      break;
+    }
+
+    executedToolCalls.push(...toolCalls);
+
+    const toolOutputs = await Promise.all(
+      toolCalls.map(async (toolCall) => {
+        const result = await runCustomerTool(
+          { businessId: input.businessId, conversationId: conversation.id },
+          toolCall
+        );
+
+        await conversationService.addMessage({
+          businessId: input.businessId,
+          conversationId: conversation.id,
+          role: "TOOL",
+          content: JSON.stringify(result),
+          toolName: toolCall.name,
+          toolPayload: result
+        });
+
+        return {
+          type: "function_call_output" as const,
+          call_id: toolCall.callId,
+          output: JSON.stringify(result)
+        };
+      })
     );
-    await conversationService.addMessage({
-      businessId: input.businessId,
-      conversationId: conversation.id,
-      role: "TOOL",
-      content: JSON.stringify(result),
-      toolName: toolCall.name,
-      toolPayload: result
+
+    response = await openai.responses.create({
+      model: defaultModel,
+      instructions: customerAgentSystemPrompt,
+      previous_response_id: response.id,
+      input: toolOutputs,
+      tools: customerAgentTools
     });
   }
 
@@ -66,18 +95,28 @@ export async function runCustomerAgent(input: CustomerAgentInput) {
   return {
     conversationId: conversation.id,
     message: assistantText,
-    toolCalls
+    toolCalls: executedToolCalls.map((toolCall) => ({
+      callId: toolCall.callId,
+      name: toolCall.name,
+      arguments: toolCall.arguments
+    }))
   };
 }
 
-function extractToolCalls(response: unknown): Array<{ name: string; arguments: Record<string, unknown> }> {
-  const output = (response as { output?: unknown[] }).output ?? [];
-  const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+type CustomerToolCall = {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+};
 
-  for (const item of output) {
-    const candidate = item as { type?: string; name?: string; arguments?: string };
+function extractToolCalls(response: Response): CustomerToolCall[] {
+  const calls: CustomerToolCall[] = [];
+
+  for (const item of response.output) {
+    const candidate = item as { type?: string; call_id?: string; name?: string; arguments?: string };
     if (candidate.type === "function_call" && candidate.name) {
       calls.push({
+        callId: candidate.call_id ?? "",
         name: candidate.name,
         arguments: safeJson(candidate.arguments)
       });
@@ -97,4 +136,3 @@ function safeJson(value: unknown): Record<string, unknown> {
     return {};
   }
 }
-

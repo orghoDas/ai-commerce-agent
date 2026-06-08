@@ -16,7 +16,7 @@ The model should never invent product availability, prices, order status, or bus
 ```text
 apps/
   api/                  Fastify API, agent orchestration, tools, services, jobs
-  admin-web/            Next.js admin dashboard scaffold
+  admin-web/            Vite React admin dashboard scaffold
   customer-widget/      Vite customer chat widget scaffold
 packages/
   shared/               Shared contracts and DTOs
@@ -49,7 +49,7 @@ Add WhatsApp, Instagram, image search, payments, POS integrations, and delivery 
 - Agent: OpenAI Responses API or Agents SDK with tool calling
 - Database: PostgreSQL
 - ORM: Prisma
-- Admin web: Next.js
+- Admin web: Vite React
 - Queue/jobs: BullMQ, Temporal, or a managed scheduled job
 - Billing: Stripe Billing
 - Messaging later: WhatsApp Cloud API, Twilio, Instagram Messaging API
@@ -62,8 +62,18 @@ This scaffold is intentionally code-ready but not dependency-installed.
 npm install
 cp .env.example .env
 npm run db:generate
+npm run db:migrate
+npm run seed
 npm run dev
 ```
+
+If you use Homebrew PostgreSQL on macOS instead of Docker, your `DATABASE_URL` will usually use your macOS username:
+
+```bash
+DATABASE_URL=postgresql://your_mac_username@localhost:5432/ai_commerce_agent
+```
+
+The seed script prints the demo `businessId`; use that id in admin API calls.
 
 ## Critical Implementation Rules
 

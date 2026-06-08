@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 describe("inventory reservation", () => {
-  it("should reserve the last unit only once", () => {
+  it("documents the last-unit oversell test case", () => {
     // Implement with a test database:
     // 1. Create business, product, variant, stockOnHand = 1.
     // 2. Run two reserveInventory calls concurrently.
