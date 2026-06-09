@@ -88,6 +88,7 @@ model Business {
   unavailableRequests UnavailableProductRequest[]
   reports             DailyReport[]
   auditLogs           AuditLog[]
+  subscription        BillingSubscription?
 }
 
 model User {
@@ -323,6 +324,29 @@ model DailyReport {
 
   @@unique([businessId, reportDate])
   @@index([businessId, createdAt])
+}
+
+model BillingSubscription {
+  id                     String   @id @default(cuid())
+  businessId             String   @unique
+  plan                   String   @default("STARTER")
+  status                 String   @default("TRIALING")
+  seats                  Int      @default(1)
+  monthlyPriceCents      Int      @default(4900)
+  currency               String   @default("USD")
+  currentPeriodStart     DateTime @default(now())
+  currentPeriodEnd       DateTime
+  trialEndsAt            DateTime?
+  cancelAtPeriodEnd      Boolean  @default(false)
+  provider               String   @default("manual")
+  providerCustomerId     String?
+  providerSubscriptionId String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  business               Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, status])
+  @@index([status, currentPeriodEnd])
 }
 
 model AuditLog {

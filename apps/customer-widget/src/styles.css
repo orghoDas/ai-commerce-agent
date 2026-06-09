@@ -6,6 +6,7 @@
   --panel: #ffffff;
   --line: #d9dee7;
   --accent: #0f766e;
+  --danger: #b42318;
 }
 
 * {
@@ -27,19 +28,24 @@ body {
 }
 
 .widget {
-  width: min(420px, 100%);
-  height: 640px;
+  width: min(440px, 100%);
+  height: min(720px, calc(100vh - 48px));
+  min-height: 560px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto auto 1fr auto auto auto;
   overflow: hidden;
 }
 
 .widgetHeader {
   padding: 16px;
   border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .widgetHeader strong {
@@ -47,9 +53,32 @@ body {
   font-size: 16px;
 }
 
-.widgetHeader span {
+.widgetHeader span,
+.statusBar,
+.imageHint,
+.errorHint {
   color: var(--muted);
   font-size: 13px;
+}
+
+.headerButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.statusBar {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .messages {
@@ -61,7 +90,9 @@ body {
 }
 
 .bubble {
-  max-width: 82%;
+  max-width: 84%;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
   padding: 10px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -79,10 +110,44 @@ body {
   color: #ffffff;
 }
 
-.imageHint {
-  padding: 8px 16px;
-  color: var(--muted);
+.bubble.system {
+  align-self: center;
+  background: #fef3f2;
+  color: var(--danger);
+  max-width: 92%;
+}
+
+.quickPrompts {
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 12px;
+}
+
+.quickPrompts button {
+  border: 1px solid var(--line);
+  background: #ffffff;
+  border-radius: 999px;
+  color: var(--ink);
+  cursor: pointer;
+  flex: 0 0 auto;
   font-size: 13px;
+  padding: 7px 10px;
+}
+
+.quickPrompts button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.imageHint,
+.errorHint {
+  padding: 8px 16px;
+}
+
+.errorHint {
+  color: var(--danger);
 }
 
 .composer {
@@ -116,8 +181,22 @@ body {
   border-color: var(--accent);
 }
 
-.sendButton:disabled {
+.sendButton:disabled,
+.composer input:disabled {
   opacity: 0.6;
   cursor: wait;
 }
 
+@media (max-width: 520px) {
+  .page {
+    padding: 0;
+  }
+
+  .widget {
+    width: 100%;
+    height: 100vh;
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+  }
+}

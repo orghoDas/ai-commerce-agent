@@ -58,17 +58,28 @@ export type DailyReportSummary = {
     inStockVariants: number;
     lowStockVariants: number;
     outOfStockVariants: number;
+    stockOnHandUnits?: number;
+    reservedUnits?: number;
+    availableUnits?: number;
   };
   orders: {
+    total?: number;
     pending: number;
     confirmed: number;
     fulfilled: number;
     cancelled: number;
+    needsHumanReview?: number;
     grossOrderValueCents: number;
+    averageOrderValueCents?: number;
   };
   demand: {
     unavailableRequests: number;
     noMatchSearches: number;
   };
+  conversations?: {
+    opened: number;
+    needsHuman: number;
+  };
 };
 
+export type ReportPeriod = "daily" | "weekly" | "monthly";

@@ -29,6 +29,50 @@ textarea {
   font: inherit;
 }
 
+.authShell {
+  align-items: center;
+  background: var(--background);
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.authPanel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  margin: 0 auto;
+  max-width: 420px;
+  padding: 24px;
+  width: 100%;
+}
+
+.authPanel h1 {
+  font-size: 24px;
+  margin: 0;
+}
+
+.authPanel p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.authPanel label {
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  gap: 6px;
+}
+
+.authPanel input {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--foreground);
+  padding: 10px;
+}
+
 .shell {
   min-height: 100vh;
   display: grid;
@@ -88,6 +132,29 @@ textarea {
   margin: 6px 0 0;
 }
 
+.topbarActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.sessionBadge {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.sessionBadge span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .button {
   border: 0;
   background: var(--accent);
@@ -100,6 +167,11 @@ textarea {
   cursor: pointer;
 }
 
+.button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .button.secondary {
   background: #ffffff;
   color: var(--foreground);
@@ -108,7 +180,7 @@ textarea {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
 }
 
@@ -153,6 +225,371 @@ textarea {
 .panel h2 {
   margin: 0;
   font-size: 17px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subtle {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.notice {
+  color: var(--accent-strong);
+  padding: 12px 18px 0;
+  font-size: 14px;
+}
+
+.reportHeader {
+  gap: 16px;
+}
+
+.reportHeader > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.reportControls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.segmented {
+  background: #f2f4f7;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  padding: 3px;
+}
+
+.segmented button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 7px 10px;
+}
+
+.segmented button.active {
+  background: #ffffff;
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.dateControl {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  display: inline-flex;
+  gap: 7px;
+  padding: 7px 9px;
+}
+
+.dateControl input {
+  border: 0;
+  color: var(--foreground);
+  padding: 0;
+}
+
+.reportBody {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.reportStatGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.reportStat,
+.reportBlock {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.reportStat {
+  padding: 14px;
+}
+
+.reportStat span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reportStat strong {
+  display: block;
+  font-size: 22px;
+  margin-top: 6px;
+}
+
+.reportGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reportBlock h3 {
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.statusBreakdown {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  padding: 14px;
+}
+
+.statusBreakdown span {
+  background: #f9fafb;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+}
+
+.statusBreakdown strong {
+  color: var(--foreground);
+}
+
+.compactTable .table th,
+.compactTable .table td {
+  padding: 10px 14px;
+}
+
+.compactEmpty {
+  padding: 16px 14px;
+}
+
+.billingBody {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.billingSummary,
+.billingUsage,
+.planGrid {
+  display: grid;
+  gap: 12px;
+}
+
+.billingSummary {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.billingSummary div,
+.billingUsage span,
+.planCard {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.billingSummary div {
+  padding: 14px;
+}
+
+.billingSummary span,
+.billingUsage span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.billingSummary strong {
+  display: block;
+  font-size: 20px;
+  margin-top: 6px;
+}
+
+.billingUsage {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.billingUsage span {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 10px;
+}
+
+.billingUsage strong {
+  color: var(--foreground);
+}
+
+.planGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.planCard {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.planCard.active {
+  border-color: var(--accent);
+}
+
+.planCard h3 {
+  font-size: 16px;
+  margin: 0 0 4px;
+}
+
+.planCard strong {
+  font-size: 22px;
+}
+
+.planCard span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.importBand {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.importHeader,
+.importControls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.importHeader h3 {
+  align-items: center;
+  display: inline-flex;
+  font-size: 15px;
+  gap: 8px;
+  margin: 0;
+}
+
+.importControls {
+  justify-content: flex-start;
+}
+
+.fileControl {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--foreground);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.fileControl input {
+  max-width: 260px;
+}
+
+.csvTextarea {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  min-height: 118px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.importSummary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.importSummary span {
+  background: #f9fafb;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.importSummary strong {
+  color: var(--foreground);
+}
+
+.importErrors {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.formBand {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: 18px;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.compactForm {
+  align-content: start;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+}
+
+.formGrid h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 15px;
+}
+
+.formGrid label {
+  color: var(--muted);
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.formGrid input,
+.formGrid select,
+.tableInput {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--foreground);
+  min-width: 0;
+  padding: 9px 10px;
+  width: 100%;
+}
+
+.tableInput {
+  max-width: 96px;
+}
+
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
 }
 
 .table {
@@ -171,6 +608,64 @@ textarea {
 .table th {
   color: var(--muted);
   font-weight: 600;
+}
+
+.cellNote {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.orderItems {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.empty {
+  color: var(--muted);
+  padding: 22px 18px;
+}
+
+.dangerText {
+  color: var(--danger);
+}
+
+.toggleLabel {
+  align-items: center;
+  color: var(--foreground);
+  display: inline-flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.iconTextButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--foreground);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.iconTextButton:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.dangerButton {
+  color: var(--danger);
 }
 
 .status {
@@ -193,6 +688,197 @@ textarea {
   color: var(--danger);
 }
 
+.conversationShell {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.34fr) minmax(0, 1fr);
+  min-height: 520px;
+}
+
+.conversationList {
+  border-right: 1px solid var(--line);
+  display: grid;
+  align-content: start;
+  max-height: 680px;
+  overflow-y: auto;
+}
+
+.conversationButton {
+  background: #ffffff;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--foreground);
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  text-align: left;
+  width: 100%;
+}
+
+.conversationButton.active,
+.conversationButton:hover {
+  background: #f0fdfa;
+}
+
+.conversationTopLine,
+.conversationMeta,
+.conversationContact {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.conversationTopLine strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.conversationTopLine span,
+.conversationMeta,
+.conversationContact {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.conversationSnippet {
+  color: var(--foreground);
+  display: -webkit-box;
+  font-size: 13px;
+  line-height: 1.35;
+  min-height: 36px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.conversationDetail {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.conversationHeaderBlock {
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px 18px;
+}
+
+.conversationHeaderBlock h3 {
+  font-size: 16px;
+  margin: 0 0 6px;
+}
+
+.conversationHeaderActions {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.linkedOrders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 58%;
+}
+
+.linkedOrders span {
+  background: #f2f4f7;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--foreground);
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.adminReplyBox {
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 14px 18px;
+}
+
+.adminReplyBox textarea {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-width: 0;
+  padding: 10px;
+  resize: vertical;
+}
+
+.transcript {
+  align-content: start;
+  background: #fbfcfd;
+  display: grid;
+  gap: 12px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.messageRow {
+  display: flex;
+}
+
+.messageRow.customer {
+  justify-content: flex-end;
+}
+
+.messageRow.assistant,
+.messageRow.tool,
+.messageRow.admin,
+.messageRow.system {
+  justify-content: flex-start;
+}
+
+.messageBubble {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-width: min(680px, 82%);
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+}
+
+.messageRow.customer .messageBubble {
+  background: #ecfdf3;
+  border-color: #abefc6;
+}
+
+.messageRow.tool .messageBubble,
+.messageRow.system .messageBubble {
+  background: #f2f4f7;
+}
+
+.messageMeta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.messageBubble p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.messageBubble a {
+  color: var(--accent-strong);
+  display: inline-flex;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
@@ -203,8 +889,58 @@ textarea {
   }
 
   .metrics,
-  .grid {
+  .grid,
+  .reportGrid,
+  .planGrid,
+  .formBand,
+  .formGrid,
+  .compactForm,
+  .conversationShell {
     grid-template-columns: 1fr;
   }
-}
 
+  .panel header.reportHeader,
+  .reportControls {
+    align-items: stretch;
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .segmented {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .importHeader,
+  .importControls {
+    align-items: stretch;
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .conversationList {
+    border-right: 0;
+    max-height: 320px;
+  }
+
+  .conversationHeaderBlock {
+    display: grid;
+  }
+
+  .conversationHeaderActions {
+    justify-items: stretch;
+  }
+
+  .linkedOrders {
+    justify-content: flex-start;
+    max-width: none;
+  }
+
+  .adminReplyBox {
+    grid-template-columns: 1fr;
+  }
+
+  .messageBubble {
+    max-width: 100%;
+  }
+}

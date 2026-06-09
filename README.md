@@ -74,6 +74,23 @@ DATABASE_URL=postgresql://your_mac_username@localhost:5432/ai_commerce_agent
 ```
 
 The seed script prints the demo `businessId`; use that id in admin API calls.
+The admin dashboard also accepts `VITE_BUSINESS_ID` in `apps/admin-web/.env`.
+The customer widget accepts the same `VITE_BUSINESS_ID` in `apps/customer-widget/.env`.
+
+## Chat Provider Modes
+
+Use the no-LLM deterministic MVP flow while you are building product/order logic:
+
+```bash
+AI_PROVIDER=deterministic
+```
+
+Switch back to OpenAI later when your API billing/quota is ready:
+
+```bash
+AI_PROVIDER=openai
+OPENAI_API_KEY=your_key
+```
 
 ## Critical Implementation Rules
 

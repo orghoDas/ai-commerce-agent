@@ -1,5 +1,6 @@
 import type { OrderStatus } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { canTransitionOrder } from "../domain/orderState.js";
 
 type CreatePendingOrderInput = {
   businessId: string;
@@ -18,6 +19,12 @@ type CreatePendingOrderInput = {
 type ListOrdersInput = {
   businessId: string;
   status?: string;
+};
+
+type UpdateOrderStatusInput = {
+  businessId: string;
+  orderId: string;
+  status: OrderStatus;
 };
 
 export const orderService = {
@@ -183,10 +190,150 @@ export const orderService = {
             : "Could not create the order."
       };
     }
+  },
+
+  async updateOrderStatus(input: UpdateOrderStatusInput) {
+    try {
+      const order = await prisma.$transaction(async (tx) => {
+        const existingOrder = await tx.order.findFirst({
+          where: {
+            id: input.orderId,
+            businessId: input.businessId
+          },
+          include: {
+            items: true,
+            reservations: true
+          }
+        });
+
+        if (!existingOrder) {
+          throw new Error("ORDER_NOT_FOUND");
+        }
+
+        if (!canTransitionOrder(existingOrder.status, input.status)) {
+          throw new Error("INVALID_ORDER_TRANSITION");
+        }
+
+        if (input.status === "CONFIRMED") {
+          await tx.inventoryReservation.updateMany({
+            where: {
+              businessId: input.businessId,
+              orderId: input.orderId,
+              status: "ACTIVE"
+            },
+            data: {
+              expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            }
+          });
+        }
+
+        if (input.status === "CANCELLED") {
+          await tx.inventoryReservation.updateMany({
+            where: {
+              businessId: input.businessId,
+              orderId: input.orderId,
+              status: "ACTIVE"
+            },
+            data: { status: "RELEASED" }
+          });
+        }
+
+        if (input.status === "FULFILLED") {
+          const activeReservations = existingOrder.reservations.filter((reservation) => reservation.status === "ACTIVE");
+          if (activeReservations.length === 0) {
+            throw new Error("NO_ACTIVE_RESERVATIONS");
+          }
+
+          for (const reservation of activeReservations) {
+            await tx.$queryRaw`
+              SELECT id FROM "InventoryItem"
+              WHERE "businessId" = ${input.businessId}
+              AND "variantId" = ${reservation.variantId}
+              FOR UPDATE
+            `;
+
+            const inventory = await tx.inventoryItem.findUnique({
+              where: { variantId: reservation.variantId }
+            });
+
+            if (!inventory || inventory.businessId !== input.businessId) {
+              throw new Error("INVENTORY_NOT_FOUND");
+            }
+
+            if (inventory.stockOnHand < reservation.quantity) {
+              throw new Error("INSUFFICIENT_STOCK_TO_FULFILL");
+            }
+
+            await tx.inventoryItem.update({
+              where: { variantId: reservation.variantId },
+              data: {
+                stockOnHand: {
+                  decrement: reservation.quantity
+                }
+              }
+            });
+
+            await tx.inventoryReservation.update({
+              where: { id: reservation.id },
+              data: { status: "CONVERTED" }
+            });
+          }
+        }
+
+        const updatedOrder = await tx.order.update({
+          where: { id: input.orderId },
+          data: { status: input.status },
+          include: { items: true }
+        });
+
+        await tx.auditLog.create({
+          data: {
+            businessId: input.businessId,
+            actorType: "ADMIN",
+            action: "ORDER_UPDATED",
+            entityType: "Order",
+            entityId: input.orderId,
+            metadata: {
+              from: existingOrder.status,
+              to: input.status,
+              orderNumber: existingOrder.orderNumber
+            }
+          }
+        });
+
+        return updatedOrder;
+      });
+
+      return { ok: true, data: order };
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "ORDER_UPDATE_FAILED";
+      return {
+        ok: false,
+        errorCode: code,
+        message: messageForOrderStatusError(code)
+      };
+    }
   }
 };
 
 async function nextOrderNumber(businessId: string) {
   const count = await prisma.order.count({ where: { businessId } });
   return `ORD-${String(count + 1).padStart(6, "0")}`;
+}
+
+function messageForOrderStatusError(code: string) {
+  switch (code) {
+    case "ORDER_NOT_FOUND":
+      return "Order was not found.";
+    case "INVALID_ORDER_TRANSITION":
+      return "That order status change is not allowed.";
+    case "NO_ACTIVE_RESERVATIONS":
+      return "This order has no active inventory reservation to fulfill.";
+    case "INVENTORY_NOT_FOUND":
+      return "Inventory was not found for this order.";
+    case "INSUFFICIENT_STOCK_TO_FULFILL":
+      return "There is not enough stock on hand to fulfill this order.";
+    default:
+      return "Could not update the order status.";
+  }
 }

@@ -10,4 +10,3 @@ export const allowedOrderTransitions = {
 export function canTransitionOrder(from: keyof typeof allowedOrderTransitions, to: string) {
   return (allowedOrderTransitions[from] as readonly string[]).includes(to);
 }
-

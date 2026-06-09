@@ -1,43 +1,32 @@
+import "dotenv/config";
 import fs from "node:fs/promises";
-
-type CsvProductRow = {
-  name: string;
-  sku: string;
-  priceCents: number;
-  stockOnHand: number;
-};
+import { catalogService } from "../apps/api/src/services/catalog.service.js";
+import { prisma } from "../apps/api/src/db/prisma.js";
 
 async function main() {
-  const filePath = process.argv[2];
-  if (!filePath) {
-    throw new Error("Usage: tsx scripts/import-products-csv.ts ./products.csv");
+  const [filePath, businessId] = process.argv.slice(2);
+  if (!filePath || !businessId) {
+    throw new Error("Usage: tsx scripts/import-products-csv.ts ./products.csv <businessId>");
   }
 
-  const csv = await fs.readFile(filePath, "utf8");
-  const rows = parseSimpleCsv(csv);
-
-  console.log(`Parsed ${rows.length} product rows.`);
-  console.log("Wire this script to Prisma once your CSV format is finalized.");
-}
-
-function parseSimpleCsv(csv: string): CsvProductRow[] {
-  const [headerLine, ...lines] = csv.trim().split("\n");
-  const headers = headerLine.split(",").map((header) => header.trim());
-
-  return lines.map((line) => {
-    const values = line.split(",").map((value) => value.trim());
-    const row = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]));
-    return {
-      name: row.name,
-      sku: row.sku,
-      priceCents: Number(row.priceCents),
-      stockOnHand: Number(row.stockOnHand)
-    };
+  const csvText = await fs.readFile(filePath, "utf8");
+  const result = await catalogService.importProductsCsv({
+    businessId,
+    csvText
   });
+
+  console.log(JSON.stringify(result, null, 2));
+
+  if (result.errors.length > 0) {
+    process.exitCode = 1;
+  }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
-
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
