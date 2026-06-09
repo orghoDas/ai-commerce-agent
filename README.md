@@ -1,6 +1,6 @@
 # AI Commerce Agent SaaS
 
-Working MVP for a sellable commerce chat-agent service. The product currently supports a deterministic no-LLM customer flow, admin authentication, catalog/inventory management, order workflow, conversation takeover, reports, CSV import, and local billing/subscription scaffolding.
+Working MVP for a sellable commerce chat-agent service. The product currently supports a deterministic no-LLM customer flow, admin authentication, role-based admin APIs, catalog/inventory management, order workflow, conversation takeover, customer identity linking, audit logs, reports, CSV import, and local billing/subscription scaffolding.
 
 Core principle:
 
@@ -12,6 +12,10 @@ Catalog, inventory, order, auth, and billing truth must live in the backend.
 ## Current Features
 
 - Customer chat widget connected to the real `/v1/chat` endpoint.
+- Customer identity linking:
+  - widget sends a stable browser customer id
+  - conversations and orders link to `Customer`
+  - repeat browser sessions can be tied back to the same customer record
 - No-LLM deterministic sales flow:
   - greet customer
   - fuzzy product search
@@ -21,13 +25,17 @@ Catalog, inventory, order, auth, and billing truth must live in the backend.
   - create pending order
   - reserve inventory
 - Optional OpenAI agent path with tool calling.
-- Admin login with signed session token.
-- Protected `/v1/admin/*` API routes.
+- Admin auth with database-backed sessions, logout revocation, password reset, invite acceptance, and auth rate limiting.
+- Protected `/v1/admin/*` API routes with per-route role permissions.
 - Product and variant CRUD.
 - Inventory edit and stock/reorder management.
 - CSV product import from admin UI or CLI.
+- Local image upload storage with `/uploads/...` static serving.
+- Product image upload/delete from the admin inventory table.
+- Deterministic image product search using stored image fingerprints and color signatures.
 - Order queue with confirm, cancel, and fulfill actions.
 - Conversation viewer with full transcript and linked orders.
+- Audit-log UI for recent admin, auth, product, order, billing, and customer-link events.
 - Human takeover:
   - take over/release conversation
   - send admin replies
@@ -38,7 +46,8 @@ Catalog, inventory, order, auth, and billing truth must live in the backend.
 - Billing/subscription foundation:
   - Starter/Growth/Scale plans
   - local subscription model
-  - usage counters
+  - usage counters and tenant limits
+  - billing enforcement for seats, active products, and billing-period conversations
   - manual plan/status updates
 - Daily report job scaffold.
 - PostgreSQL/Prisma persistence.
@@ -88,7 +97,7 @@ Important values:
 
 ```bash
 AI_PROVIDER=deterministic
-JWT_SECRET=replace_me_with_long_random_secret
+SESSION_SECRET=replace_me_with_a_32_char_random_secret
 OPENAI_API_KEY=replace_me
 ```
 
@@ -209,13 +218,22 @@ Public:
 GET  /health
 POST /v1/chat
 GET  /v1/chat/:conversationId/messages
+POST /v1/uploads/images
 ```
 
 Auth:
 
 ```http
-POST /v1/auth/login
-GET  /v1/auth/me
+POST   /v1/auth/login
+POST   /v1/auth/logout
+GET    /v1/auth/me
+POST   /v1/auth/password-reset/request
+POST   /v1/auth/password-reset/confirm
+GET    /v1/auth/invites?businessId=...
+POST   /v1/auth/invites
+DELETE /v1/auth/invites/:inviteId?businessId=...
+GET    /v1/auth/invites/:token
+POST   /v1/auth/invites/accept
 ```
 
 Admin routes require:
@@ -230,6 +248,8 @@ Admin products:
 GET   /v1/admin/products?businessId=...
 POST  /v1/admin/products
 PATCH /v1/admin/products/:productId
+POST  /v1/admin/products/:productId/images?businessId=...
+DELETE /v1/admin/products/:productId/images/:imageId?businessId=...
 POST  /v1/admin/products/:productId/variants
 PATCH /v1/admin/products/:productId/variants/:variantId
 POST  /v1/admin/products/search
@@ -287,7 +307,7 @@ POST /v1/webhooks/stripe
 
 ## Billing State
 
-Billing is currently local/manual, not connected to a payment provider.
+Billing is currently local/manual, not connected to a payment provider. Tenant limits are enforced in the backend.
 
 Current plan ids:
 
@@ -303,8 +323,15 @@ The Billing panel shows:
 - subscription status
 - monthly price
 - renewal status
-- usage counters
+- usage counters and plan limits
 - plan selection controls
+
+Enforced limits:
+
+- Seats: active users plus pending invites cannot exceed subscription seats.
+- Products: active products cannot exceed the selected plan's product limit.
+- Conversations: new customer conversations cannot exceed the selected plan's billing-period conversation limit.
+- Subscription state: cancelled, past-due, expired, or ended-trial tenants cannot create new billable usage.
 
 Stripe/Paddle can be added later by using the existing `BillingSubscription` model and webhook placeholder.
 
@@ -316,7 +343,7 @@ Flow:
 
 ```text
 customer message
--> product search
+-> text or image product search
 -> stock check
 -> quote price
 -> collect customer details
@@ -325,7 +352,7 @@ customer message
 -> reserve inventory
 ```
 
-Image search currently responds with a typed-product fallback in deterministic mode. The OpenAI path has image-search tool scaffolding, but production image matching still needs a real storage/vision/embedding pipeline.
+Image search in deterministic mode uses uploaded product-image fingerprints and color signatures. It works best after each catalog product has at least one clear product image. The OpenAI path still has tool-calling scaffolding, but the default MVP image path does not require a paid model API.
 
 ## Testing And Verification
 
@@ -341,23 +368,26 @@ The API service tests cover the current high-risk inventory/order logic.
 
 ## Security Notes
 
-- Admin APIs are protected by signed session tokens.
+- Admin APIs are protected by database-backed bearer sessions that can be revoked on logout or password reset.
+- Login, password reset, and invite acceptance endpoints are rate-limited.
+- Owner/Admin users can create and revoke Admin, Agent, and Viewer invites from the Account Security panel.
 - Admin requests are scoped to the authenticated user's `businessId`.
+- Admin routes enforce role permissions per route:
+  - Owner: billing updates and all admin operations.
+  - Admin: audit logs, user invites, catalog management, order/conversation operations, reports, billing view.
+  - Agent: order and conversation operations, catalog/order/conversation read.
+  - Viewer: read-only catalog, orders, conversations, and reports.
 - Customer chat remains public because it is intended to be embedded.
 - Payment details are not stored.
-- `JWT_SECRET` must be changed before any real deployment.
+- `SESSION_SECRET` must be changed before any real deployment.
 - Demo password is only for local development.
 
 ## Still To Do Before Selling
 
-- Replace local auth with production-grade sessions, password reset, invite flow, and rate limiting.
+- Plug auth reset/invite tokens into a real email delivery provider.
 - Connect Stripe/Paddle for real checkout, subscription lifecycle, and webhook verification.
-- Add tenant limits and billing enforcement.
-- Add file/image upload storage.
-- Add real image product search.
+- Move uploads to durable object storage such as S3/R2 before production.
+- Add advanced image embeddings or a vision model for harder image matches.
 - Add WhatsApp/Instagram/SMS channels.
-- Add audit-log UI.
-- Add customer identity linking.
-- Add stronger admin role permissions per route.
-- Add more tests for CSV import, auth, human takeover, and billing.
+- Add more tests for external channel integrations, object storage, payment webhooks, and deployment flows.
 - Add deployment config and CI.

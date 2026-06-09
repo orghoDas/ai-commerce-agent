@@ -3,20 +3,26 @@ import {
   BarChart3,
   Bot,
   CalendarDays,
+  Copy,
   CreditCard,
   Download,
   FileUp,
+  ImagePlus,
+  KeyRound,
+  Link as LinkIcon,
   MessageSquare,
   Package,
   Plus,
   RefreshCw,
   Save,
   Send,
+  ShieldCheck,
   ShoppingCart,
+  UserPlus,
   UserRoundCheck
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPatch, apiPost, getApiAuthToken, setApiAuthToken } from "../lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm, getApiAuthToken, setApiAuthToken } from "../lib/api";
 
 const DEMO_BUSINESS_ID = import.meta.env.VITE_BUSINESS_ID ?? "cmq4w4tnf0000rt4rfr38t93b";
 
@@ -32,6 +38,7 @@ type OrderItem = {
 
 type AuthUser = {
   userId: string;
+  sessionId: string;
   businessId: string;
   email: string;
   name: string | null;
@@ -51,12 +58,78 @@ type AuthSession = {
 
 type LoginResponse = AuthSession & {
   token: string;
+  expiresAt: string;
 };
+
+type AuthMode = "login" | "reset-request" | "reset-confirm" | "accept-invite";
 
 type LoginFormState = {
   email: string;
   password: string;
   businessSlug: string;
+};
+
+type PasswordResetRequestResponse = {
+  message: string;
+  resetUrl?: string;
+  expiresAt?: string;
+};
+
+type PasswordResetRequestFormState = {
+  email: string;
+  businessSlug: string;
+};
+
+type PasswordResetConfirmFormState = {
+  token: string;
+  password: string;
+};
+
+type InviteFormState = {
+  email: string;
+  name: string;
+  role: "ADMIN" | "AGENT" | "VIEWER";
+};
+
+type UserInvite = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: "ADMIN" | "AGENT" | "VIEWER";
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  acceptUrl?: string;
+  invitedBy?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  acceptedBy?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+};
+
+type InvitePreview = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: "ADMIN" | "AGENT" | "VIEWER";
+  expiresAt: string;
+  business: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+};
+
+type AcceptInviteFormState = {
+  token: string;
+  name: string;
+  password: string;
 };
 
 type BillingPlan = {
@@ -83,11 +156,21 @@ type BillingOverview = {
     provider: string;
   };
   plans: BillingPlan[];
+  limits: {
+    seats: number;
+    productLimit: number;
+    conversationLimit: number;
+    billingPeriodStart: string;
+    billingPeriodEnd: string;
+    subscriptionUsable: boolean;
+  };
   usage: {
     activeProducts: number;
     conversations: number;
+    billingPeriodConversations: number;
     orders: number;
     users: number;
+    pendingInvites: number;
   };
 };
 
@@ -101,15 +184,18 @@ type Order = {
   subtotalCents: number;
   currency: string;
   createdAt: string;
+  customer: ConversationCustomer | null;
   items: OrderItem[];
 };
 
 type ConversationCustomer = {
   id: string;
+  externalId: string | null;
   name: string | null;
   phone: string | null;
   email: string | null;
   defaultAddress: string | null;
+  lastSeenAt: string;
 };
 
 type ConversationMessage = {
@@ -242,6 +328,17 @@ type ProductVariant = {
   } | null;
 };
 
+type ProductImage = {
+  id: string;
+  url: string;
+  altText: string | null;
+  visibleText: string | null;
+  width: number | null;
+  height: number | null;
+  averageColor: string | null;
+  createdAt: string;
+};
+
 type Product = {
   id: string;
   name: string;
@@ -252,6 +349,44 @@ type Product = {
   tags: string[];
   searchKeywords: string[];
   variants: ProductVariant[];
+  images: ProductImage[];
+};
+
+type AuditAction =
+  | "AUTH_LOGIN"
+  | "AUTH_LOGOUT"
+  | "PASSWORD_RESET_REQUESTED"
+  | "PASSWORD_RESET_COMPLETED"
+  | "USER_INVITED"
+  | "USER_INVITE_ACCEPTED"
+  | "PRODUCT_CREATED"
+  | "PRODUCT_UPDATED"
+  | "STOCK_ADJUSTED"
+  | "RESERVATION_CREATED"
+  | "RESERVATION_RELEASED"
+  | "ORDER_CREATED"
+  | "ORDER_UPDATED"
+  | "HUMAN_TAKEOVER"
+  | "CUSTOMER_LINKED"
+  | "TOOL_CALL_FAILED"
+  | "REPORT_SENT"
+  | "BILLING_UPDATED";
+
+type AuditLogEntry = {
+  id: string;
+  actorType: string;
+  actorId: string | null;
+  action: AuditAction;
+  entityType: string | null;
+  entityId: string | null;
+  metadata: unknown;
+  createdAt: string;
+  actor: {
+    id: string;
+    email: string;
+    name: string | null;
+    role: AuthUser["role"];
+  } | null;
 };
 
 type ProductFormState = {
@@ -319,6 +454,25 @@ const REPORT_PERIODS: Array<{ label: string; value: ReportPeriod }> = [
   { label: "Monthly", value: "monthly" }
 ];
 
+const AUDIT_ACTIONS: Array<{ label: string; value: AuditAction }> = [
+  { label: "Login", value: "AUTH_LOGIN" },
+  { label: "Logout", value: "AUTH_LOGOUT" },
+  { label: "Password Reset Requested", value: "PASSWORD_RESET_REQUESTED" },
+  { label: "Password Reset Completed", value: "PASSWORD_RESET_COMPLETED" },
+  { label: "User Invited", value: "USER_INVITED" },
+  { label: "Invite Accepted", value: "USER_INVITE_ACCEPTED" },
+  { label: "Product Created", value: "PRODUCT_CREATED" },
+  { label: "Product Updated", value: "PRODUCT_UPDATED" },
+  { label: "Stock Adjusted", value: "STOCK_ADJUSTED" },
+  { label: "Order Created", value: "ORDER_CREATED" },
+  { label: "Order Updated", value: "ORDER_UPDATED" },
+  { label: "Human Takeover", value: "HUMAN_TAKEOVER" },
+  { label: "Customer Linked", value: "CUSTOMER_LINKED" },
+  { label: "Tool Failed", value: "TOOL_CALL_FAILED" },
+  { label: "Report Sent", value: "REPORT_SENT" },
+  { label: "Billing Updated", value: "BILLING_UPDATED" }
+];
+
 const PRODUCT_IMPORT_TEMPLATE = [
   "name,sku,variantTitle,price,stockOnHand,reorderPoint,brand,category,tags,searchKeywords,color,size,currency,productStatus,variantActive",
   "Wireless Headphones,WH-1000XM5-BLK,Black,349.00,12,3,Sony,Audio,headphones|wireless,sony|black,Black,,USD,ACTIVE,true"
@@ -330,10 +484,39 @@ const defaultLoginForm: LoginFormState = {
   businessSlug: "demo-shop"
 };
 
+const defaultResetRequestForm: PasswordResetRequestFormState = {
+  email: "owner@demo-shop.local",
+  businessSlug: "demo-shop"
+};
+
+const emptyInviteForm: InviteFormState = {
+  email: "",
+  name: "",
+  role: "AGENT"
+};
+
 export default function DashboardPage() {
+  const initialResetToken = initialTokenParam("resetToken");
+  const initialInviteToken = initialTokenParam("inviteToken");
+  const [authMode, setAuthMode] = useState<AuthMode>(
+    initialInviteToken ? "accept-invite" : initialResetToken ? "reset-confirm" : "login"
+  );
   const [authToken, setAuthToken] = useState<string | null>(() => getApiAuthToken());
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [loginForm, setLoginForm] = useState<LoginFormState>(defaultLoginForm);
+  const [resetRequestForm, setResetRequestForm] = useState<PasswordResetRequestFormState>(defaultResetRequestForm);
+  const [resetConfirmForm, setResetConfirmForm] = useState<PasswordResetConfirmFormState>({
+    token: initialResetToken,
+    password: ""
+  });
+  const [acceptInviteForm, setAcceptInviteForm] = useState<AcceptInviteFormState>({
+    token: initialInviteToken,
+    name: "",
+    password: ""
+  });
+  const [invitePreview, setInvitePreview] = useState<InvitePreview | null>(null);
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const [resetUrl, setResetUrl] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(Boolean(getApiAuthToken()));
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -346,34 +529,49 @@ export default function DashboardPage() {
   const [reportDate, setReportDate] = useState(todayDateInput());
   const [report, setReport] = useState<ReportResponse | null>(null);
   const [billing, setBilling] = useState<BillingOverview | null>(null);
+  const [invites, setInvites] = useState<UserInvite[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditActionFilter, setAuditActionFilter] = useState<AuditAction | "">("");
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isLoadingConversationDetail, setIsLoadingConversationDetail] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(true);
   const [isLoadingBilling, setIsLoadingBilling] = useState(true);
+  const [isLoadingInvites, setIsLoadingInvites] = useState(false);
+  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const [productsError, setProductsError] = useState<string | null>(null);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null);
+  const [savingImageProductId, setSavingImageProductId] = useState<string | null>(null);
   const [savingConversationAction, setSavingConversationAction] = useState(false);
   const [adminReplyText, setAdminReplyText] = useState("");
   const [isSavingBilling, setIsSavingBilling] = useState(false);
+  const [isSavingInvite, setIsSavingInvite] = useState(false);
   const [productForm, setProductForm] = useState<ProductFormState>(emptyProductForm);
   const [variantForm, setVariantForm] = useState<VariantFormState>(emptyVariantForm);
+  const [inviteForm, setInviteForm] = useState<InviteFormState>(emptyInviteForm);
+  const [latestInviteUrl, setLatestInviteUrl] = useState<string | null>(null);
   const [variantEdits, setVariantEdits] = useState<Record<string, VariantEditState>>({});
   const [csvImportText, setCsvImportText] = useState("");
   const [csvImportResult, setCsvImportResult] = useState<ProductImportResult | null>(null);
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const [isImportingProducts, setIsImportingProducts] = useState(false);
   const businessId = authSession?.user.businessId ?? DEMO_BUSINESS_ID;
+  const canManageUsers = authSession?.user.role === "OWNER" || authSession?.user.role === "ADMIN";
+  const canViewAudit = authSession?.user.role === "OWNER" || authSession?.user.role === "ADMIN";
+  const canUpdateBilling = authSession?.user.role === "OWNER";
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoginError(null);
+    setAuthMessage(null);
     setIsLoggingIn(true);
     try {
       const response = await apiPost<LoginResponse>("/v1/auth/login", {
@@ -385,6 +583,7 @@ export default function DashboardPage() {
       setAuthToken(response.token);
       setAuthSession({ user: response.user, business: response.business });
       setLoginForm((current) => ({ ...current, password: "" }));
+      setAuthMode("login");
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "Could not log in");
     } finally {
@@ -392,7 +591,97 @@ export default function DashboardPage() {
     }
   }
 
-  function logout() {
+  async function requestPasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError(null);
+    setAuthMessage(null);
+    setResetUrl(null);
+    setIsLoggingIn(true);
+    try {
+      const response = await apiPost<PasswordResetRequestResponse>("/v1/auth/password-reset/request", {
+        email: resetRequestForm.email,
+        businessSlug: resetRequestForm.businessSlug || undefined
+      });
+      setAuthMessage(response.message);
+      setResetUrl(response.resetUrl ?? null);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Could not request password reset");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  async function confirmPasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError(null);
+    setAuthMessage(null);
+    setIsLoggingIn(true);
+    try {
+      await apiPost<{ ok: boolean }>("/v1/auth/password-reset/confirm", {
+        token: resetConfirmForm.token,
+        password: resetConfirmForm.password
+      });
+      setApiAuthToken(null);
+      setAuthToken(null);
+      setResetConfirmForm({ token: "", password: "" });
+      setAuthMessage("Password updated. Sign in with your new password.");
+      setAuthMode("login");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Could not reset password");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  async function loadInvitePreview(token = acceptInviteForm.token) {
+    if (!token.trim()) {
+      setInvitePreview(null);
+      return;
+    }
+
+    setLoginError(null);
+    try {
+      const preview = await apiGet<InvitePreview>(`/v1/auth/invites/${encodeURIComponent(token.trim())}`);
+      setInvitePreview(preview);
+      setAcceptInviteForm((current) => ({
+        ...current,
+        name: current.name || preview.name || ""
+      }));
+    } catch (error) {
+      setInvitePreview(null);
+      setLoginError(error instanceof Error ? error.message : "Could not load invite");
+    }
+  }
+
+  async function acceptInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError(null);
+    setAuthMessage(null);
+    setIsLoggingIn(true);
+    try {
+      const response = await apiPost<LoginResponse>("/v1/auth/invites/accept", {
+        token: acceptInviteForm.token,
+        name: acceptInviteForm.name || undefined,
+        password: acceptInviteForm.password
+      });
+      setApiAuthToken(response.token);
+      setAuthToken(response.token);
+      setAuthSession({ user: response.user, business: response.business });
+      setAcceptInviteForm({ token: "", name: "", password: "" });
+      setAuthMode("login");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Could not accept invite");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  async function logout() {
+    try {
+      await apiPost<void>("/v1/auth/logout", {});
+    } catch {
+      // Local session cleanup should still happen if the server already expired the session.
+    }
     setApiAuthToken(null);
     setAuthToken(null);
     setAuthSession(null);
@@ -402,6 +691,8 @@ export default function DashboardPage() {
     setSelectedConversation(null);
     setReport(null);
     setBilling(null);
+    setInvites([]);
+    setAuditLogs([]);
   }
 
   async function loadCurrentSession() {
@@ -520,12 +811,70 @@ export default function DashboardPage() {
     }
   }
 
+  async function loadInvites() {
+    if (!canManageUsers) {
+      setInvites([]);
+      return;
+    }
+
+    setIsLoadingInvites(true);
+    setInviteError(null);
+    try {
+      const data = await apiGet<UserInvite[]>(`/v1/auth/invites?businessId=${businessId}`);
+      setInvites(data);
+    } catch (error) {
+      setInviteError(error instanceof Error ? error.message : "Could not load invites");
+    } finally {
+      setIsLoadingInvites(false);
+    }
+  }
+
+  async function loadAuditLogs(action = auditActionFilter) {
+    if (!canViewAudit) {
+      setAuditLogs([]);
+      return;
+    }
+
+    setIsLoadingAuditLogs(true);
+    setAuditError(null);
+    try {
+      const params = new URLSearchParams({
+        businessId,
+        limit: "100"
+      });
+      if (action) {
+        params.set("action", action);
+      }
+
+      const data = await apiGet<AuditLogEntry[]>(`/v1/admin/audit-logs?${params.toString()}`);
+      setAuditLogs(data);
+    } catch (error) {
+      setAuditError(error instanceof Error ? error.message : "Could not load audit logs");
+    } finally {
+      setIsLoadingAuditLogs(false);
+    }
+  }
+
   async function refreshAll() {
-    await Promise.all([loadOrders(), loadProducts(), loadConversations(), loadReport(), loadBilling()]);
+    await Promise.all([
+      loadOrders(),
+      loadProducts(),
+      loadConversations(),
+      loadReport(),
+      loadBilling(),
+      canManageUsers ? loadInvites() : Promise.resolve(),
+      canViewAudit ? loadAuditLogs() : Promise.resolve()
+    ]);
   }
 
   useEffect(() => {
     void loadCurrentSession();
+  }, []);
+
+  useEffect(() => {
+    if (authMode === "accept-invite" && acceptInviteForm.token) {
+      void loadInvitePreview(acceptInviteForm.token);
+    }
   }, []);
 
   useEffect(() => {
@@ -654,6 +1003,45 @@ export default function DashboardPage() {
     }
   }
 
+  async function uploadProductImage(product: Product, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    setProductsError(null);
+    setSavingImageProductId(product.id);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("altText", product.name);
+      formData.append("visibleText", [product.name, product.brand, product.category].filter(Boolean).join(" "));
+
+      await apiPostForm<ProductImage>(`/v1/admin/products/${product.id}/images?businessId=${businessId}`, formData);
+      setSaveMessage(`Image uploaded for ${product.name}.`);
+      await loadProducts();
+    } catch (error) {
+      setProductsError(error instanceof Error ? error.message : "Could not upload product image");
+    } finally {
+      setSavingImageProductId(null);
+    }
+  }
+
+  async function deleteProductImage(product: Product, image: ProductImage) {
+    setProductsError(null);
+    setSavingImageProductId(product.id);
+    try {
+      await apiDelete(`/v1/admin/products/${product.id}/images/${image.id}?businessId=${businessId}`);
+      setSaveMessage(`Image removed from ${product.name}.`);
+      await loadProducts();
+    } catch (error) {
+      setProductsError(error instanceof Error ? error.message : "Could not delete product image");
+    } finally {
+      setSavingImageProductId(null);
+    }
+  }
+
   async function setProductStatus(product: Product, status: Product["status"]) {
     setSaveMessage(null);
     try {
@@ -776,6 +1164,56 @@ export default function DashboardPage() {
     }
   }
 
+  async function changeAuditActionFilter(action: AuditAction | "") {
+    setAuditActionFilter(action);
+    await loadAuditLogs(action);
+  }
+
+  async function createInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setInviteError(null);
+    setLatestInviteUrl(null);
+    setIsSavingInvite(true);
+    try {
+      const invite = await apiPost<UserInvite>("/v1/auth/invites", {
+        businessId,
+        email: inviteForm.email,
+        name: inviteForm.name || undefined,
+        role: inviteForm.role
+      });
+      setLatestInviteUrl(invite.acceptUrl ?? null);
+      setInviteForm(emptyInviteForm);
+      setSaveMessage(`Invite created for ${invite.email}.`);
+      await loadInvites();
+    } catch (error) {
+      setInviteError(error instanceof Error ? error.message : "Could not create invite");
+    } finally {
+      setIsSavingInvite(false);
+    }
+  }
+
+  async function revokeInvite(invite: UserInvite) {
+    setInviteError(null);
+    setIsSavingInvite(true);
+    try {
+      await apiDelete(`/v1/auth/invites/${invite.id}?businessId=${businessId}`);
+      setSaveMessage(`Invite revoked for ${invite.email}.`);
+      await loadInvites();
+    } catch (error) {
+      setInviteError(error instanceof Error ? error.message : "Could not revoke invite");
+    } finally {
+      setIsSavingInvite(false);
+    }
+  }
+
+  async function copyLatestInviteUrl() {
+    if (!latestInviteUrl) {
+      return;
+    }
+    await navigator.clipboard.writeText(latestInviteUrl);
+    setSaveMessage("Invite link copied.");
+  }
+
   const pendingOrders = useMemo(() => orders.filter((order) => order.status === "PENDING"), [orders]);
   const confirmedOrders = useMemo(() => orders.filter((order) => order.status === "CONFIRMED"), [orders]);
   const actionOrders = useMemo(
@@ -823,35 +1261,152 @@ export default function DashboardPage() {
   if (!authSession) {
     return (
       <div className="authShell">
-        <form className="authPanel" onSubmit={(event) => void login(event)}>
+        <div className="authPanel">
           <h1>AI Commerce Agent</h1>
-          <label>
-            Email
-            <input
-              type="email"
-              value={loginForm.email}
-              onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={loginForm.password}
-              onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Business Slug
-            <input value={loginForm.businessSlug} onChange={(event) => setLoginForm({ ...loginForm, businessSlug: event.target.value })} />
-          </label>
+
+          {authMode === "login" ? (
+            <form className="authForm" onSubmit={(event) => void login(event)}>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={loginForm.email}
+                  onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Business Slug
+                <input value={loginForm.businessSlug} onChange={(event) => setLoginForm({ ...loginForm, businessSlug: event.target.value })} />
+              </label>
+              <button className="button" type="submit" disabled={isLoggingIn}>
+                {isLoggingIn ? "Signing In" : "Sign In"}
+              </button>
+            </form>
+          ) : null}
+
+          {authMode === "reset-request" ? (
+            <form className="authForm" onSubmit={(event) => void requestPasswordReset(event)}>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={resetRequestForm.email}
+                  onChange={(event) => setResetRequestForm({ ...resetRequestForm, email: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Business Slug
+                <input
+                  value={resetRequestForm.businessSlug}
+                  onChange={(event) => setResetRequestForm({ ...resetRequestForm, businessSlug: event.target.value })}
+                />
+              </label>
+              <button className="button" type="submit" disabled={isLoggingIn}>
+                {isLoggingIn ? "Sending" : "Send Reset Link"}
+              </button>
+            </form>
+          ) : null}
+
+          {authMode === "reset-confirm" ? (
+            <form className="authForm" onSubmit={(event) => void confirmPasswordReset(event)}>
+              <label>
+                Reset Token
+                <input
+                  value={resetConfirmForm.token}
+                  onChange={(event) => setResetConfirmForm({ ...resetConfirmForm, token: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                New Password
+                <input
+                  type="password"
+                  value={resetConfirmForm.password}
+                  onChange={(event) => setResetConfirmForm({ ...resetConfirmForm, password: event.target.value })}
+                  required
+                />
+              </label>
+              <button className="button" type="submit" disabled={isLoggingIn}>
+                {isLoggingIn ? "Saving" : "Reset Password"}
+              </button>
+            </form>
+          ) : null}
+
+          {authMode === "accept-invite" ? (
+            <form className="authForm" onSubmit={(event) => void acceptInvite(event)}>
+              <label>
+                Invite Token
+                <input
+                  value={acceptInviteForm.token}
+                  onChange={(event) => setAcceptInviteForm({ ...acceptInviteForm, token: event.target.value })}
+                  onBlur={() => void loadInvitePreview()}
+                  required
+                />
+              </label>
+              {invitePreview ? (
+                <div className="authSummary">
+                  <strong>{invitePreview.business.name}</strong>
+                  <span>
+                    {invitePreview.email} / {formatStatus(invitePreview.role)}
+                  </span>
+                </div>
+              ) : null}
+              <label>
+                Name
+                <input
+                  value={acceptInviteForm.name}
+                  onChange={(event) => setAcceptInviteForm({ ...acceptInviteForm, name: event.target.value })}
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={acceptInviteForm.password}
+                  onChange={(event) => setAcceptInviteForm({ ...acceptInviteForm, password: event.target.value })}
+                  required
+                />
+              </label>
+              <button className="button" type="submit" disabled={isLoggingIn}>
+                {isLoggingIn ? "Creating Account" : "Accept Invite"}
+              </button>
+            </form>
+          ) : null}
+
+          {authMessage ? <div className="notice authNotice">{authMessage}</div> : null}
+          {resetUrl ? (
+            <div className="authSummary">
+              <span>Reset Link</span>
+              <a href={resetUrl}>{resetUrl}</a>
+            </div>
+          ) : null}
           {loginError ? <div className="empty dangerText compactEmpty">{loginError}</div> : null}
-          <button className="button" type="submit" disabled={isLoggingIn}>
-            {isLoggingIn ? "Signing In" : "Sign In"}
-          </button>
-        </form>
+          <div className="authLinks">
+            <button type="button" onClick={() => setAuthMode("login")}>
+              Sign In
+            </button>
+            <button type="button" onClick={() => setAuthMode("reset-request")}>
+              Forgot Password
+            </button>
+            <button type="button" onClick={() => setAuthMode("reset-confirm")}>
+              Reset Token
+            </button>
+            <button type="button" onClick={() => setAuthMode("accept-invite")}>
+              Accept Invite
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -868,6 +1423,7 @@ export default function DashboardPage() {
           <a href="#">Conversations</a>
           <a href="#">Reports</a>
           <a href="#">Billing</a>
+          <a href="#">Audit</a>
           <a href="#">Settings</a>
         </nav>
       </aside>
@@ -886,12 +1442,12 @@ export default function DashboardPage() {
             <button
               className="button"
               onClick={() => void refreshAll()}
-              disabled={isLoadingOrders || isLoadingProducts || isLoadingConversations || isLoadingReport || isLoadingBilling}
+              disabled={isLoadingOrders || isLoadingProducts || isLoadingConversations || isLoadingReport || isLoadingBilling || isLoadingAuditLogs}
             >
               <RefreshCw size={18} aria-hidden="true" />
               Refresh
             </button>
-            <button className="button secondary" onClick={logout} type="button">
+            <button className="button secondary" onClick={() => void logout()} type="button">
               Sign Out
             </button>
           </div>
@@ -1138,7 +1694,7 @@ export default function DashboardPage() {
               </h2>
               <span className="subtle">{billing ? `${formatStatus(billing.subscription.plan)} / ${formatStatus(billing.subscription.status)}` : "Loading"}</span>
             </div>
-            {billing ? (
+            {billing && canUpdateBilling ? (
               <div className="rowActions">
                 <button
                   className="iconTextButton"
@@ -1160,9 +1716,12 @@ export default function DashboardPage() {
             ) : null}
           </header>
 
-          {billingError ? <div className="empty dangerText">{billingError}</div> : null}
+	          {billingError ? <div className="empty dangerText">{billingError}</div> : null}
+	          {billing && !billing.limits.subscriptionUsable ? (
+	            <div className="empty dangerText compactEmpty">Subscription is not active for new billable usage.</div>
+	          ) : null}
 
-          {billing ? (
+	          {billing ? (
             <div className="billingBody">
               <div className="billingSummary">
                 <div>
@@ -1183,20 +1742,26 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="billingUsage">
-                <span>
-                  Users <strong>{billing.usage.users}</strong>
-                </span>
-                <span>
-                  Active Products <strong>{billing.usage.activeProducts}</strong>
-                </span>
-                <span>
-                  Conversations <strong>{billing.usage.conversations}</strong>
-                </span>
-                <span>
-                  Orders <strong>{billing.usage.orders}</strong>
-                </span>
-              </div>
+	              <div className="billingUsage">
+	                <span>
+	                  Users <strong>{billing.usage.users}/{billing.limits.seats}</strong>
+	                </span>
+	                <span>
+	                  Pending Invites <strong>{billing.usage.pendingInvites}</strong>
+	                </span>
+	                <span>
+	                  Active Products <strong>{billing.usage.activeProducts}/{billing.limits.productLimit}</strong>
+	                </span>
+	                <span>
+	                  Period Conversations <strong>{billing.usage.billingPeriodConversations}/{billing.limits.conversationLimit}</strong>
+	                </span>
+	                <span>
+	                  Total Conversations <strong>{billing.usage.conversations}</strong>
+	                </span>
+	                <span>
+	                  Orders <strong>{billing.usage.orders}</strong>
+	                </span>
+	              </div>
 
               <div className="planGrid">
                 {billing.plans.map((plan) => (
@@ -1211,7 +1776,7 @@ export default function DashboardPage() {
                     <button
                       className={plan.id === billing.subscription.plan ? "button secondary" : "button"}
                       type="button"
-                      disabled={isSavingBilling || plan.id === billing.subscription.plan}
+                      disabled={isSavingBilling || plan.id === billing.subscription.plan || !canUpdateBilling}
                       onClick={() => void updateSubscription({ plan: plan.id })}
                     >
                       {plan.id === billing.subscription.plan ? "Current" : "Select"}
@@ -1226,6 +1791,200 @@ export default function DashboardPage() {
             <div className="empty">Loading billing.</div>
           )}
         </section>
+
+        <section className="panel">
+          <header className="reportHeader">
+            <div>
+              <h2>
+                <KeyRound size={18} aria-hidden="true" /> Account Security
+              </h2>
+              <span className="subtle">{canManageUsers ? "Sessions, password recovery, and team invites" : "Current session"}</span>
+            </div>
+            {canManageUsers ? (
+              <button className="iconTextButton" type="button" onClick={() => void loadInvites()} disabled={isLoadingInvites}>
+                <RefreshCw size={16} aria-hidden="true" />
+                Refresh Invites
+              </button>
+            ) : null}
+          </header>
+
+          {inviteError ? <div className="empty dangerText">{inviteError}</div> : null}
+
+          <div className="securityBody">
+            <div className="securityGrid">
+              <div className="securityCard">
+                <h3>Signed In</h3>
+                <span>{authSession.user.email}</span>
+                <strong>{authSession.user.name ?? "No name set"}</strong>
+                <span>{formatStatus(authSession.user.role)}</span>
+              </div>
+
+              {canManageUsers ? (
+                <form className="securityCard inviteForm" onSubmit={(event) => void createInvite(event)}>
+                  <h3>
+                    <UserPlus size={16} aria-hidden="true" /> Invite User
+                  </h3>
+                  <label>
+                    Email
+                    <input
+                      type="email"
+                      value={inviteForm.email}
+                      onChange={(event) => setInviteForm({ ...inviteForm, email: event.target.value })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Name
+                    <input value={inviteForm.name} onChange={(event) => setInviteForm({ ...inviteForm, name: event.target.value })} />
+                  </label>
+                  <label>
+                    Role
+                    <select value={inviteForm.role} onChange={(event) => setInviteForm({ ...inviteForm, role: event.target.value as InviteFormState["role"] })}>
+                      <option value="AGENT">Agent</option>
+                      <option value="VIEWER">Viewer</option>
+                      <option value="ADMIN">Admin</option>
+                    </select>
+                  </label>
+                  <button className="button" type="submit" disabled={isSavingInvite}>
+                    <UserPlus size={18} aria-hidden="true" />
+                    {isSavingInvite ? "Creating" : "Create Invite"}
+                  </button>
+                </form>
+              ) : null}
+            </div>
+
+            {latestInviteUrl ? (
+              <div className="inviteLinkBox">
+                <LinkIcon size={16} aria-hidden="true" />
+                <a href={latestInviteUrl}>{latestInviteUrl}</a>
+                <button className="iconTextButton" type="button" onClick={() => void copyLatestInviteUrl()}>
+                  <Copy size={16} aria-hidden="true" />
+                  Copy
+                </button>
+              </div>
+            ) : null}
+
+            {canManageUsers ? (
+              <div className="tableWrap compactTable">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Expires</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invites.map((invite) => (
+                      <tr key={invite.id}>
+                        <td>
+                          <strong>{invite.email}</strong>
+                          <span className="cellNote">{invite.name ?? "No name"}</span>
+                        </td>
+                        <td>{formatStatus(invite.role)}</td>
+                        <td>
+                          <span className={`status ${invite.revokedAt ? "danger" : invite.acceptedAt ? "" : "warning"}`}>
+                            {inviteStatus(invite)}
+                          </span>
+                        </td>
+                        <td>{formatDate(invite.expiresAt)}</td>
+                        <td>
+                          {!invite.acceptedAt && !invite.revokedAt ? (
+                            <button className="iconTextButton dangerButton" type="button" onClick={() => void revokeInvite(invite)} disabled={isSavingInvite}>
+                              Revoke
+                            </button>
+                          ) : (
+                            <span className="subtle">Done</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!isLoadingInvites && invites.length === 0 ? <div className="empty compactEmpty">No invites yet.</div> : null}
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        {canViewAudit ? (
+          <section className="panel">
+            <header className="reportHeader">
+              <div>
+                <h2>
+                  <ShieldCheck size={18} aria-hidden="true" /> Audit Log
+                </h2>
+                <span className="subtle">{isLoadingAuditLogs ? "Loading" : `${auditLogs.length} recent events`}</span>
+              </div>
+              <div className="auditControls">
+                <select
+                  value={auditActionFilter}
+                  onChange={(event) => void changeAuditActionFilter(event.target.value as AuditAction | "")}
+                  aria-label="Audit action filter"
+                >
+                  <option value="">All Actions</option>
+                  {AUDIT_ACTIONS.map((action) => (
+                    <option key={action.value} value={action.value}>
+                      {action.label}
+                    </option>
+                  ))}
+                </select>
+                <button className="iconTextButton" type="button" onClick={() => void loadAuditLogs()} disabled={isLoadingAuditLogs}>
+                  <RefreshCw size={16} aria-hidden="true" />
+                  Refresh Audit
+                </button>
+              </div>
+            </header>
+
+            {auditError ? <div className="empty dangerText">{auditError}</div> : null}
+
+            {!auditError && auditLogs.length === 0 && !isLoadingAuditLogs ? (
+              <div className="empty">No audit events match this filter.</div>
+            ) : null}
+
+            {auditLogs.length > 0 ? (
+              <div className="tableWrap compactTable">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Action</th>
+                      <th>Actor</th>
+                      <th>Entity</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td>{formatDateTime(log.createdAt)}</td>
+                        <td>
+                          <span className="status">{formatStatus(log.action)}</span>
+                        </td>
+                        <td>
+                          <strong>{auditActorName(log)}</strong>
+                          <span className="cellNote">{log.actorType}</span>
+                        </td>
+                        <td>
+                          {log.entityType ?? "System"}
+                          <span className="cellNote">{shortId(log.entityId)}</span>
+                        </td>
+                        <td>
+                          <details className="metadataDetails">
+                            <summary>Metadata</summary>
+                            <pre>{formatAuditMetadata(log.metadata)}</pre>
+                          </details>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="panel">
           <header>
@@ -1477,8 +2236,9 @@ export default function DashboardPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Product</th>
-                  <th>Variant</th>
+	                  <th>Product</th>
+	                  <th>Images</th>
+	                  <th>Variant</th>
                   <th>SKU</th>
                   <th>Price</th>
                   <th>Stock</th>
@@ -1494,11 +2254,38 @@ export default function DashboardPage() {
                     const edit = variantEdits[variant.id] ?? toVariantEdit(variant);
                     return (
                       <tr key={variant.id}>
-                        <td>
-                          <strong>{product.name}</strong>
-                          <span className="cellNote">{[product.brand, product.category].filter(Boolean).join(" / ") || "No category"}</span>
-                        </td>
-                        <td>{variant.title}</td>
+	                        <td>
+	                          <strong>{product.name}</strong>
+	                          <span className="cellNote">{[product.brand, product.category].filter(Boolean).join(" / ") || "No category"}</span>
+	                        </td>
+	                        <td>
+	                          <div className="imageCell">
+	                            <div className="productThumbs">
+	                              {product.images.slice(0, 3).map((image) => (
+	                                <button
+	                                  className="thumbButton"
+	                                  key={image.id}
+	                                  type="button"
+	                                  title="Delete image"
+	                                  onClick={() => void deleteProductImage(product, image)}
+	                                  disabled={savingImageProductId === product.id}
+	                                >
+	                                  <img src={image.url} alt={image.altText ?? product.name} />
+	                                </button>
+	                              ))}
+	                            </div>
+	                            <label className="fileMiniButton">
+	                              <ImagePlus size={14} aria-hidden="true" />
+	                              <input
+	                                type="file"
+	                                accept="image/*"
+	                                onChange={(event) => void uploadProductImage(product, event)}
+	                                disabled={savingImageProductId === product.id}
+	                              />
+	                            </label>
+	                          </div>
+	                        </td>
+	                        <td>{variant.title}</td>
                         <td>{variant.sku}</td>
                         <td>
                           <input
@@ -1603,8 +2390,9 @@ export default function DashboardPage() {
                         <span className="cellNote">{formatDateTime(order.createdAt)}</span>
                       </td>
                       <td>
-                        {order.customerName ?? "Unknown"}
-                        <span className="cellNote">{order.customerPhone ?? "No phone"}</span>
+                        {order.customer?.name ?? order.customerName ?? "Unknown"}
+                        <span className="cellNote">{order.customer?.phone ?? order.customerPhone ?? "No phone"}</span>
+                        {order.customer?.email ? <span className="cellNote">{order.customer.email}</span> : null}
                       </td>
                       <td>
                         <div className="orderItems">
@@ -1713,6 +2501,8 @@ export default function DashboardPage() {
                         <h3>{conversationCustomerName(activeConversation)}</h3>
                         <div className="conversationContact">
                           <span>{conversationCustomerPhone(activeConversation)}</span>
+                          {activeConversation.customer?.email ? <span>{activeConversation.customer.email}</span> : null}
+                          {activeConversation.customer?.externalId ? <span>{shortId(activeConversation.customer.externalId)}</span> : null}
                           <span>{formatStatus(activeConversation.channel)}</span>
                           <span>{formatStatus(activeConversation.status)}</span>
                         </div>
@@ -1894,6 +2684,30 @@ function conversationCustomerPhone(conversation: Conversation) {
   return conversation.customer?.phone ?? conversation.orders[0]?.customerPhone ?? "No phone";
 }
 
+function auditActorName(log: AuditLogEntry) {
+  if (log.actor) {
+    return log.actor.name ?? log.actor.email;
+  }
+
+  return log.actorId ? shortId(log.actorId) : log.actorType;
+}
+
+function formatAuditMetadata(metadata: unknown) {
+  if (!metadata) {
+    return "{}";
+  }
+
+  return JSON.stringify(metadata, null, 2);
+}
+
+function shortId(value: string | null | undefined) {
+  if (!value) {
+    return "No id";
+  }
+
+  return value.length > 14 ? `${value.slice(0, 10)}...` : value;
+}
+
 function reportCurrency(report: ReportResponse) {
   return report.orders.find((order) => order.currency)?.currency ?? report.topProducts.find((product) => product.currency)?.currency ?? "USD";
 }
@@ -1940,6 +2754,26 @@ function formatStatus(status: string) {
     .split("_")
     .map((part) => part[0]?.toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function inviteStatus(invite: UserInvite) {
+  if (invite.acceptedAt) {
+    return "Accepted";
+  }
+  if (invite.revokedAt) {
+    return "Revoked";
+  }
+  if (new Date(invite.expiresAt) <= new Date()) {
+    return "Expired";
+  }
+  return "Pending";
+}
+
+function initialTokenParam(name: string) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return new URLSearchParams(window.location.search).get(name) ?? "";
 }
 
 function centsToDollars(cents: number) {

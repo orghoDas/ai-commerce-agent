@@ -5,6 +5,7 @@ import "./styles.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
 const BUSINESS_ID = import.meta.env.VITE_BUSINESS_ID ?? "cmq4w4tnf0000rt4rfr38t93b";
+const CUSTOMER_ID_STORAGE_KEY = `aiCommerceCustomerId:${BUSINESS_ID}`;
 
 type ChatMessage = {
   id?: string;
@@ -17,6 +18,12 @@ type ChatResponse = {
   mode?: string;
   message?: string;
   state?: string;
+};
+
+type UploadImageResponse = {
+  url: string;
+  width: number;
+  height: number;
 };
 
 type ConversationMessagesResponse = {
@@ -35,13 +42,16 @@ type ConversationMessagesResponse = {
 const quickPrompts = ["Do you have black Sony headphones?", "I want one", "confirm"];
 
 function CustomerWidget() {
+  const [customerExternalId] = useState(getOrCreateCustomerExternalId);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: "Hi! What product are you looking for today?" }
   ]);
   const [message, setMessage] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [imageName, setImageName] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<string>("idle");
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -110,7 +120,10 @@ function CustomerWidget() {
           businessId: BUSINESS_ID,
           conversationId,
           message: trimmed || "Can you identify this product?",
-          imageUrl: attachedImage || undefined
+          imageUrl: attachedImage || undefined,
+          customer: {
+            externalId: customerExternalId
+          }
         })
       });
 
@@ -124,6 +137,7 @@ function CustomerWidget() {
       setConversationId(chatData.conversationId);
       setAgentState(chatData.state ?? "unknown");
       setImageUrl("");
+      setImageName("");
       setMessages((current) => [
         ...current,
         { role: "assistant", content: chatData.message ?? "I need a little more information." }
@@ -141,9 +155,44 @@ function CustomerWidget() {
     setConversationId(undefined);
     setMessage("");
     setImageUrl("");
+    setImageName("");
     setError(null);
     setAgentState("idle");
     setMessages([{ role: "assistant", content: "Hi! What product are you looking for today?" }]);
+  }
+
+  async function uploadImage(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`${API_BASE_URL}/v1/uploads/images?businessId=${BUSINESS_ID}`, {
+        method: "POST",
+        body: formData
+      });
+      const data = (await response.json()) as UploadImageResponse | { message?: string };
+
+      if (!response.ok) {
+        throw new Error("message" in data && data.message ? data.message : `Upload failed: ${response.status}`);
+      }
+
+      setImageUrl((data as UploadImageResponse).url);
+      setImageName(file.name);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Could not upload image.";
+      setError(message);
+      setMessages((current) => [...current, { role: "system", content: message }]);
+    } finally {
+      setIsUploadingImage(false);
+    }
   }
 
   return (
@@ -178,29 +227,22 @@ function CustomerWidget() {
             <button
               type="button"
               key={prompt}
-              onClick={() => void sendMessage(prompt)}
-              disabled={isSending}
+	                  onClick={() => void sendMessage(prompt)}
+	                  disabled={isSending || isUploadingImage}
             >
               {prompt}
             </button>
           ))}
         </div>
 
-        {imageUrl ? <div className="imageHint">Image URL attached</div> : null}
+        {imageUrl ? <div className="imageHint">Image attached: {imageName || "product image"}</div> : null}
         {error ? <div className="errorHint">{error}</div> : null}
 
         <footer className="composer">
-          <button
-            className="iconButton"
-            type="button"
-            title="Attach image URL"
-            onClick={() => {
-              const url = window.prompt("Paste a product image URL");
-              if (url) setImageUrl(url);
-            }}
-          >
+          <label className={`iconButton ${isUploadingImage ? "disabled" : ""}`} title="Attach image">
             <ImagePlus size={18} aria-hidden="true" />
-          </button>
+            <input type="file" accept="image/*" onChange={(event) => void uploadImage(event)} disabled={isUploadingImage || isSending} />
+          </label>
           <input
             value={message}
             onChange={(event) => setMessage(event.target.value)}
@@ -208,9 +250,9 @@ function CustomerWidget() {
               if (event.key === "Enter" && !event.shiftKey) void sendMessage();
             }}
             placeholder="Ask about a product"
-            disabled={isSending}
+            disabled={isSending || isUploadingImage}
           />
-          <button className="sendButton" type="button" onClick={() => void sendMessage()} disabled={isSending}>
+          <button className="sendButton" type="button" onClick={() => void sendMessage()} disabled={isSending || isUploadingImage}>
             <Send size={18} aria-hidden="true" />
           </button>
         </footer>
@@ -225,6 +267,21 @@ function toWidgetMessage(message: ConversationMessagesResponse["messages"][numbe
     role: message.role === "CUSTOMER" ? "customer" : "assistant",
     content: message.imageUrl ? `${message.content}\nImage: ${message.imageUrl}` : message.content
   };
+}
+
+function getOrCreateCustomerExternalId() {
+  if (typeof window === "undefined") {
+    return `web_${Math.random().toString(36).slice(2)}`;
+  }
+
+  const existing = window.localStorage.getItem(CUSTOMER_ID_STORAGE_KEY);
+  if (existing) {
+    return existing;
+  }
+
+  const generated = `web_${crypto.randomUUID()}`;
+  window.localStorage.setItem(CUSTOMER_ID_STORAGE_KEY, generated);
+  return generated;
 }
 
 createRoot(document.getElementById("root")!).render(<CustomerWidget />);

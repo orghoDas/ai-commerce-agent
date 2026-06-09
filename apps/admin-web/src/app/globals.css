@@ -73,6 +73,51 @@ textarea {
   padding: 10px;
 }
 
+.authForm {
+  display: grid;
+  gap: 14px;
+}
+
+.authSummary {
+  background: #f9fafb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  overflow-wrap: anywhere;
+  padding: 12px;
+}
+
+.authSummary span,
+.authSummary a {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.authSummary a {
+  color: var(--accent-strong);
+}
+
+.authNotice {
+  padding: 0;
+}
+
+.authLinks {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.authLinks button {
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  cursor: pointer;
+  padding: 0;
+}
+
 .shell {
   min-height: 100vh;
   display: grid;
@@ -458,6 +503,120 @@ textarea {
   font-size: 13px;
 }
 
+.securityBody {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.securityGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 0.4fr) minmax(0, 0.6fr);
+}
+
+.securityCard,
+.inviteLinkBox {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.securityCard {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.securityCard h3 {
+  align-items: center;
+  display: inline-flex;
+  font-size: 15px;
+  gap: 8px;
+  margin: 0;
+}
+
+.securityCard span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.inviteForm {
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+  align-items: end;
+}
+
+.inviteForm h3 {
+  grid-column: 1 / -1;
+}
+
+.inviteForm label {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.inviteForm input,
+.inviteForm select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--foreground);
+  min-width: 0;
+  padding: 9px 10px;
+  width: 100%;
+}
+
+.inviteLinkBox {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.inviteLinkBox a {
+  color: var(--accent-strong);
+  flex: 1;
+  min-width: 220px;
+  overflow-wrap: anywhere;
+}
+
+.auditControls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.auditControls select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--foreground);
+  min-width: 190px;
+  padding: 8px 10px;
+}
+
+.metadataDetails summary {
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.metadataDetails pre {
+  background: #f9fafb;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 8px 0 0;
+  max-width: 420px;
+  overflow-x: auto;
+  padding: 10px;
+}
+
 .importBand {
   border-bottom: 1px solid var(--line);
   display: grid;
@@ -499,6 +658,52 @@ textarea {
 
 .fileControl input {
   max-width: 260px;
+}
+
+.imageCell {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 138px;
+}
+
+.productThumbs {
+  display: flex;
+  gap: 4px;
+}
+
+.thumbButton,
+.fileMiniButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-grid;
+  height: 34px;
+  place-items: center;
+  width: 34px;
+}
+
+.thumbButton {
+  overflow: hidden;
+  padding: 0;
+}
+
+.thumbButton img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.thumbButton:disabled,
+.fileMiniButton:has(input:disabled) {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.fileMiniButton input {
+  display: none;
 }
 
 .csvTextarea {
@@ -888,12 +1093,14 @@ textarea {
     position: static;
   }
 
-  .metrics,
-  .grid,
-  .reportGrid,
-  .planGrid,
-  .formBand,
-  .formGrid,
+	  .metrics,
+	  .grid,
+	  .reportGrid,
+	  .planGrid,
+	  .securityGrid,
+	  .inviteForm,
+	  .formBand,
+	  .formGrid,
   .compactForm,
   .conversationShell {
     grid-template-columns: 1fr;
@@ -912,7 +1119,8 @@ textarea {
   }
 
   .importHeader,
-  .importControls {
+  .importControls,
+  .auditControls {
     align-items: stretch;
     display: grid;
     justify-content: stretch;

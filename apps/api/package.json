@@ -12,12 +12,16 @@
   "dependencies": {
     "@ai-commerce-agent/shared": "0.1.0",
     "@fastify/cors": "^10.0.0",
+    "@fastify/multipart": "^10.0.0",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/sensible": "^6.0.0",
+    "@fastify/static": "^9.1.3",
     "@prisma/client": "^6.0.0",
     "dotenv": "^16.4.7",
     "fastify": "^5.1.0",
     "openai": "^4.77.0",
     "pino": "^9.5.0",
+    "sharp": "^0.34.5",
     "zod": "^3.24.0"
   },
   "devDependencies": {

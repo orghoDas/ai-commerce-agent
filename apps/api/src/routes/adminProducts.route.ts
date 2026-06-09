@@ -1,6 +1,10 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
+import { requireRoles } from "../config/auth.js";
 import { catalogService } from "../services/catalog.service.js";
+import { uploadStorageService } from "../services/uploadStorage.service.js";
+import { sendTenantLimitError } from "./errorHelpers.js";
+import { multipartField, readImageUpload } from "./uploadHelpers.js";
 
 const BusinessQuerySchema = z.object({
   businessId: z.string().min(1)
@@ -13,6 +17,11 @@ const ProductParamsSchema = z.object({
 const VariantParamsSchema = z.object({
   productId: z.string().min(1),
   variantId: z.string().min(1)
+});
+
+const ProductImageParamsSchema = z.object({
+  productId: z.string().min(1),
+  imageId: z.string().min(1)
 });
 
 const CsvListSchema = z
@@ -101,12 +110,12 @@ const ImportProductsCsvSchema = z.object({
 });
 
 export async function adminProductRoutes(app: FastifyInstance) {
-  app.get("/", async (request) => {
+  app.get("/", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT", "VIEWER"], "You cannot view catalog data.") }, async (request) => {
     const query = BusinessQuerySchema.parse(request.query);
     return catalogService.listProducts(query.businessId);
   });
 
-  app.post("/", async (request, reply) => {
+  app.post("/", { preHandler: requireRoles(["OWNER", "ADMIN"], "You cannot manage catalog data.") }, async (request, reply) => {
     const body = CreateProductSchema.parse(request.body);
     try {
       const product = await catalogService.createProduct(body);
@@ -116,7 +125,7 @@ export async function adminProductRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post("/import-csv", async (request, reply) => {
+  app.post("/import-csv", { preHandler: requireRoles(["OWNER", "ADMIN"], "You cannot import catalog data.") }, async (request, reply) => {
     const body = ImportProductsCsvSchema.parse(request.body);
     try {
       return await catalogService.importProductsCsv(body);
@@ -125,7 +134,7 @@ export async function adminProductRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch("/:productId", async (request, reply) => {
+  app.patch("/:productId", { preHandler: requireRoles(["OWNER", "ADMIN"], "You cannot manage catalog data.") }, async (request, reply) => {
     const params = ProductParamsSchema.parse(request.params);
     const body = UpdateProductSchema.parse(request.body);
     try {
@@ -138,7 +147,56 @@ export async function adminProductRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post("/:productId/variants", async (request, reply) => {
+  app.post("/:productId/images", { preHandler: requireRoles(["OWNER", "ADMIN"], "You cannot manage product images.") }, async (request, reply) => {
+    const params = ProductParamsSchema.parse(request.params);
+    const query = BusinessQuerySchema.parse(request.query);
+    const upload = await readImageUpload(request, reply);
+    if (!upload) {
+      return reply;
+    }
+
+    try {
+      const storedImage = await uploadStorageService.storeImage({
+        businessId: query.businessId,
+        scope: "products",
+        ownerId: params.productId,
+        buffer: upload.buffer,
+        originalFilename: upload.file.filename,
+        mimeType: upload.file.mimetype
+      });
+
+      const image = await catalogService.addProductImage({
+        businessId: query.businessId,
+        productId: params.productId,
+        storedImage,
+        altText: multipartField(upload.file.fields, "altText"),
+        visibleText: multipartField(upload.file.fields, "visibleText")
+      });
+
+      return reply.code(201).send(image);
+    } catch (error) {
+      return sendCatalogError(reply, error);
+    }
+  });
+
+  app.delete("/:productId/images/:imageId", { preHandler: requireRoles(["OWNER", "ADMIN"], "You cannot manage product images.") }, async (request, reply) => {
+    const params = ProductImageParamsSchema.parse(request.params);
+    const query = BusinessQuerySchema.parse(request.query);
+
+    try {
+      await catalogService.deleteProductImage({
+        businessId: query.businessId,
+        productId: params.productId,
+        imageId: params.imageId
+      });
+
+      return reply.code(204).send();
+    } catch (error) {
+      return sendCatalogError(reply, error);
+    }
+  });
+
+  app.post("/:productId/variants", { preHandler: requireRoles(["OWNER", "ADMIN"], "You cannot manage variants.") }, async (request, reply) => {
     const params = ProductParamsSchema.parse(request.params);
     const body = CreateVariantSchema.parse(request.body);
     try {
@@ -152,7 +210,7 @@ export async function adminProductRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch("/:productId/variants/:variantId", async (request, reply) => {
+  app.patch("/:productId/variants/:variantId", { preHandler: requireRoles(["OWNER", "ADMIN"], "You cannot manage variants.") }, async (request, reply) => {
     const params = VariantParamsSchema.parse(request.params);
     const body = UpdateVariantSchema.parse(request.body);
     try {
@@ -166,7 +224,7 @@ export async function adminProductRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post("/search", async (request) => {
+  app.post("/search", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT", "VIEWER"], "You cannot search catalog data.") }, async (request) => {
     const body = z.object({
       businessId: z.string().min(1),
       query: z.string().min(1),
@@ -177,8 +235,13 @@ export async function adminProductRoutes(app: FastifyInstance) {
   });
 }
 
-function sendCatalogError(reply: { badRequest: (message: string) => unknown; notFound: (message: string) => unknown }, error: unknown) {
-  if (error instanceof Error && ["PRODUCT_NOT_FOUND", "VARIANT_NOT_FOUND"].includes(error.message)) {
+function sendCatalogError(reply: FastifyReply, error: unknown) {
+  const tenantLimitResponse = sendTenantLimitError(reply, error);
+  if (tenantLimitResponse) {
+    return tenantLimitResponse;
+  }
+
+  if (error instanceof Error && ["PRODUCT_NOT_FOUND", "VARIANT_NOT_FOUND", "PRODUCT_IMAGE_NOT_FOUND"].includes(error.message)) {
     return reply.notFound(error.message);
   }
 

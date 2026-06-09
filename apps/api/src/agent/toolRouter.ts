@@ -1,5 +1,6 @@
 import { catalogService } from "../services/catalog.service.js";
 import { conversationService } from "../services/conversation.service.js";
+import { customerIdentityService } from "../services/customerIdentity.service.js";
 import { imageSearchService } from "../services/imageSearch.service.js";
 import { inventoryService } from "../services/inventory.service.js";
 import { orderService } from "../services/order.service.js";
@@ -39,12 +40,21 @@ export async function runCustomerTool(context: ToolContext, call: ToolCall) {
       });
 
     case "create_order":
+      const customerIdentity = customerIdentityService.toIdentity({
+        externalId: optionalString(call.arguments.customerExternalId),
+        name: optionalString(call.arguments.customerName),
+        phone: optionalString(call.arguments.customerPhone),
+        email: optionalString(call.arguments.customerEmail),
+        defaultAddress: optionalString(call.arguments.deliveryAddress)
+      });
       return orderService.createPendingOrder({
         businessId: context.businessId,
         conversationId: context.conversationId,
         customerId: optionalString(call.arguments.customerId),
+        customerIdentity,
         customerName: optionalString(call.arguments.customerName),
         customerPhone: optionalString(call.arguments.customerPhone),
+        customerEmail: optionalString(call.arguments.customerEmail),
         deliveryAddress: optionalString(call.arguments.deliveryAddress),
         notes: optionalString(call.arguments.notes),
         items: Array.isArray(call.arguments.items)
@@ -83,4 +93,3 @@ export async function runCustomerTool(context: ToolContext, call: ToolCall) {
 function optionalString(value: unknown) {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
-

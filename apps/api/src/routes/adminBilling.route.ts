@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { requireRoles } from "../config/auth.js";
 import { billingService } from "../services/billing.service.js";
+import { sendTenantLimitError } from "./errorHelpers.js";
 
 const BillingQuerySchema = z.object({
   businessId: z.string().min(1)
@@ -15,18 +17,22 @@ const UpdateSubscriptionSchema = z.object({
 });
 
 export async function adminBillingRoutes(app: FastifyInstance) {
-  app.get("/", async (request) => {
+  app.get("/", { preHandler: requireRoles(["OWNER", "ADMIN"], "You cannot view billing.") }, async (request) => {
     const query = BillingQuerySchema.parse(request.query);
     return billingService.getBillingOverview(query.businessId);
   });
 
-  app.patch("/subscription", async (request, reply) => {
+  app.patch("/subscription", { preHandler: requireRoles(["OWNER"], "Only owners can update billing.") }, async (request, reply) => {
     const body = UpdateSubscriptionSchema.parse(request.body);
     try {
       return await billingService.updateSubscription(body);
     } catch (error) {
       if (error instanceof Error && error.message === "PLAN_NOT_FOUND") {
         return reply.notFound("Plan was not found.");
+      }
+      const tenantLimitResponse = sendTenantLimitError(reply, error);
+      if (tenantLimitResponse) {
+        return tenantLimitResponse;
       }
       return reply.badRequest(error instanceof Error ? error.message : "Could not update subscription.");
     }

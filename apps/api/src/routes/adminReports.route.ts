@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { requireRoles } from "../config/auth.js";
 import { reportService } from "../services/report.service.js";
 
 const ReportQuerySchema = z.object({
@@ -15,7 +16,7 @@ const PeriodReportQuerySchema = ReportQuerySchema.extend({
 });
 
 export async function adminReportRoutes(app: FastifyInstance) {
-  app.get("/", async (request) => {
+  app.get("/", { preHandler: requireRoles(["OWNER", "ADMIN", "VIEWER"], "You cannot view reports.") }, async (request) => {
     const query = PeriodReportQuerySchema.parse(request.query);
 
     return reportService.generatePeriodReport({
@@ -25,7 +26,7 @@ export async function adminReportRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get("/daily", async (request) => {
+  app.get("/daily", { preHandler: requireRoles(["OWNER", "ADMIN", "VIEWER"], "You cannot view reports.") }, async (request) => {
     const query = ReportQuerySchema.parse(request.query);
 
     return reportService.generateDailyReport({
@@ -34,7 +35,7 @@ export async function adminReportRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get("/weekly", async (request) => {
+  app.get("/weekly", { preHandler: requireRoles(["OWNER", "ADMIN", "VIEWER"], "You cannot view reports.") }, async (request) => {
     const query = ReportQuerySchema.parse(request.query);
 
     return reportService.generatePeriodReport({
@@ -44,7 +45,7 @@ export async function adminReportRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get("/monthly", async (request) => {
+  app.get("/monthly", { preHandler: requireRoles(["OWNER", "ADMIN", "VIEWER"], "You cannot view reports.") }, async (request) => {
     const query = ReportQuerySchema.parse(request.query);
 
     return reportService.generatePeriodReport({

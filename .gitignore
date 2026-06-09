@@ -7,4 +7,4 @@ coverage
 .turbo
 *.log
 prisma/dev.db
-
+uploads

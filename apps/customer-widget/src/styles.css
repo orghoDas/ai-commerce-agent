@@ -175,6 +175,15 @@ body {
   cursor: pointer;
 }
 
+.iconButton input {
+  display: none;
+}
+
+.iconButton.disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .sendButton {
   background: var(--accent);
   color: #ffffff;

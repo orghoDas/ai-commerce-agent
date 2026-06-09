@@ -58,8 +58,10 @@ export const customerAgentTools: Tool[] = [
       properties: {
         conversationId: { type: ["string", "null"] },
         customerId: { type: ["string", "null"] },
+        customerExternalId: { type: ["string", "null"] },
         customerName: { type: ["string", "null"] },
         customerPhone: { type: ["string", "null"] },
+        customerEmail: { type: ["string", "null"] },
         deliveryAddress: { type: ["string", "null"] },
         notes: { type: ["string", "null"] },
         items: {
@@ -76,7 +78,17 @@ export const customerAgentTools: Tool[] = [
           }
         }
       },
-      required: ["conversationId", "customerId", "customerName", "customerPhone", "deliveryAddress", "notes", "items"]
+      required: [
+        "conversationId",
+        "customerId",
+        "customerExternalId",
+        "customerName",
+        "customerPhone",
+        "customerEmail",
+        "deliveryAddress",
+        "notes",
+        "items"
+      ]
     }
   },
   {

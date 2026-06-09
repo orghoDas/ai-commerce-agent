@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { requireRoles } from "../config/auth.js";
 import { orderService } from "../services/order.service.js";
 
 export async function adminOrderRoutes(app: FastifyInstance) {
-  app.get("/", async (request) => {
+  app.get("/", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT", "VIEWER"], "You cannot view orders.") }, async (request) => {
     const query = z.object({
       businessId: z.string().min(1),
       status: z.string().optional()
@@ -12,7 +13,7 @@ export async function adminOrderRoutes(app: FastifyInstance) {
     return orderService.listOrders(query);
   });
 
-  app.patch("/:orderId/status", async (request, reply) => {
+  app.patch("/:orderId/status", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT"], "You cannot update orders.") }, async (request, reply) => {
     const params = z.object({
       orderId: z.string().min(1)
     }).parse(request.params);
@@ -25,7 +26,8 @@ export async function adminOrderRoutes(app: FastifyInstance) {
     const result = await orderService.updateOrderStatus({
       businessId: body.businessId,
       orderId: params.orderId,
-      status: body.status
+      status: body.status,
+      actorId: request.user?.userId
     });
 
     if (!result.ok) {

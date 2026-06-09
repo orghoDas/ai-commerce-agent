@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { requireRoles } from "../config/auth.js";
 import { conversationService } from "../services/conversation.service.js";
 
 const ConversationQuerySchema = z.object({
@@ -28,12 +29,12 @@ const StatusSchema = z.object({
 });
 
 export async function adminConversationRoutes(app: FastifyInstance) {
-  app.get("/", async (request) => {
+  app.get("/", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT", "VIEWER"], "You cannot view conversations.") }, async (request) => {
     const query = ConversationQuerySchema.parse(request.query);
     return conversationService.listConversations(query);
   });
 
-  app.get("/:conversationId", async (request, reply) => {
+  app.get("/:conversationId", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT", "VIEWER"], "You cannot view conversations.") }, async (request, reply) => {
     const params = ConversationParamsSchema.parse(request.params);
     const query = ConversationQuerySchema.pick({ businessId: true }).parse(request.query);
 
@@ -49,7 +50,7 @@ export async function adminConversationRoutes(app: FastifyInstance) {
     return conversation;
   });
 
-  app.post("/:conversationId/handoff", async (request, reply) => {
+  app.post("/:conversationId/handoff", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT"], "You cannot take over conversations.") }, async (request, reply) => {
     const params = ConversationParamsSchema.parse(request.params);
     const body = TakeoverSchema.parse(request.body);
 
@@ -68,7 +69,7 @@ export async function adminConversationRoutes(app: FastifyInstance) {
     return result.data;
   });
 
-  app.post("/:conversationId/messages", async (request, reply) => {
+  app.post("/:conversationId/messages", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT"], "You cannot reply to conversations.") }, async (request, reply) => {
     const params = ConversationParamsSchema.parse(request.params);
     const body = AdminMessageSchema.parse(request.body);
 
@@ -86,7 +87,7 @@ export async function adminConversationRoutes(app: FastifyInstance) {
     return reply.code(201).send(result.data);
   });
 
-  app.patch("/:conversationId/status", async (request, reply) => {
+  app.patch("/:conversationId/status", { preHandler: requireRoles(["OWNER", "ADMIN", "AGENT"], "You cannot update conversations.") }, async (request, reply) => {
     const params = ConversationParamsSchema.parse(request.params);
     const body = StatusSchema.parse(request.body);
 

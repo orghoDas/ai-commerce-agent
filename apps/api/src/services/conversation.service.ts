@@ -1,5 +1,8 @@
 import type { MessageRole } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { billingService } from "./billing.service.js";
+import type { CustomerIdentityInput } from "./customerIdentity.service.js";
+import { customerIdentityService } from "./customerIdentity.service.js";
 
 const STATE_TOOL_NAME = "deterministic_customer_state";
 const visibleMessageWhere = {
@@ -15,6 +18,7 @@ const publicMessageWhere = {
 type EnsureConversationInput = {
   businessId: string;
   conversationId?: string;
+  customerIdentity?: CustomerIdentityInput;
 };
 
 type AddMessageInput = {
@@ -75,16 +79,48 @@ export const conversationService = {
         }
       });
       if (existing) {
+        if (input.customerIdentity) {
+          await customerIdentityService.linkCustomer({
+            businessId: input.businessId,
+            conversationId: existing.id,
+            ...input.customerIdentity,
+            actorType: "CUSTOMER"
+          });
+        }
         return existing;
       }
     }
 
-    return prisma.conversation.create({
+    await billingService.assertCanCreateConversation(input.businessId);
+    const linkedCustomer = input.customerIdentity
+      ? await customerIdentityService.resolveCustomer({
+          businessId: input.businessId,
+          ...input.customerIdentity
+        })
+      : null;
+
+    const conversation = await prisma.conversation.create({
       data: {
         businessId: input.businessId,
         channel: "WEB"
       }
     });
+
+    if (linkedCustomer) {
+      const linkedConversation = await customerIdentityService.linkConversation({
+        businessId: input.businessId,
+        conversationId: conversation.id,
+        customerId: linkedCustomer.customer.id,
+        actorType: "CUSTOMER",
+        metadata: {
+          created: linkedCustomer.created,
+          matchedBy: linkedCustomer.matchedBy
+        }
+      });
+      return linkedConversation ?? conversation;
+    }
+
+    return conversation;
   },
 
   async addMessage(input: AddMessageInput) {

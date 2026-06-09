@@ -53,6 +53,12 @@ enum MessageRole {
 }
 
 enum AuditAction {
+  AUTH_LOGIN
+  AUTH_LOGOUT
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  USER_INVITED
+  USER_INVITE_ACCEPTED
   PRODUCT_CREATED
   PRODUCT_UPDATED
   STOCK_ADJUSTED
@@ -61,6 +67,7 @@ enum AuditAction {
   ORDER_CREATED
   ORDER_UPDATED
   HUMAN_TAKEOVER
+  CUSTOMER_LINKED
   TOOL_CALL_FAILED
   REPORT_SENT
   BILLING_UPDATED
@@ -89,21 +96,89 @@ model Business {
   reports             DailyReport[]
   auditLogs           AuditLog[]
   subscription        BillingSubscription?
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+  userInvites         UserInvite[]
 }
 
 model User {
-  id           String   @id @default(cuid())
-  businessId   String
-  email        String
-  name         String?
-  role         UserRole @default(ADMIN)
-  passwordHash String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id                String               @id @default(cuid())
+  businessId        String
+  email             String
+  name              String?
+  role              UserRole             @default(ADMIN)
+  passwordHash      String?
+  emailVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  business          Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sessions          Session[]
+  passwordResetTokens PasswordResetToken[]
+  sentInvites       UserInvite[]         @relation("InvitesSent")
+  acceptedInvites   UserInvite[]         @relation("InvitesAccepted")
 
   @@unique([businessId, email])
   @@index([businessId, role])
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  businessId  String
+  userId      String
+  tokenHash   String    @unique
+  ipAddress   String?
+  userAgent   String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  businessId  String
+  userId      String
+  tokenHash   String    @unique
+  requestedIp String?
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, userId])
+  @@index([expiresAt])
+  @@index([usedAt])
+}
+
+model UserInvite {
+  id              String    @id @default(cuid())
+  businessId      String
+  email           String
+  name            String?
+  role            UserRole  @default(AGENT)
+  tokenHash       String    @unique
+  invitedByUserId String?
+  acceptedByUserId String?
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invitedBy       User?     @relation("InvitesSent", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  acceptedBy      User?     @relation("InvitesAccepted", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, email])
+  @@index([businessId, acceptedAt])
+  @@index([expiresAt])
 }
 
 model Customer {
@@ -114,15 +189,18 @@ model Customer {
   phone          String?
   email          String?
   defaultAddress String?
+  lastSeenAt     DateTime       @default(now())
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   business       Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
   conversations  Conversation[]
   orders         Order[]
 
+  @@unique([businessId, externalId])
   @@index([businessId, phone])
   @@index([businessId, email])
   @@index([businessId, externalId])
+  @@index([businessId, lastSeenAt])
 }
 
 model Product {
@@ -173,17 +251,26 @@ model ProductVariant {
 }
 
 model ProductImage {
-  id           String   @id @default(cuid())
-  businessId   String
-  productId    String
-  url          String
-  altText      String?
-  visibleText  String?
-  embeddingRef String?
-  createdAt    DateTime @default(now())
-  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  businessId     String
+  productId      String
+  url            String
+  storageKey     String?
+  mimeType       String?
+  sizeBytes      Int?
+  width          Int?
+  height         Int?
+  altText        String?
+  visibleText    String?
+  averageColor   String?
+  perceptualHash String?
+  colorSignature Json?
+  embeddingRef   String?
+  createdAt      DateTime @default(now())
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([businessId, productId])
+  @@index([businessId, perceptualHash])
 }
 
 model InventoryItem {

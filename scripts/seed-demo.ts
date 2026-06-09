@@ -25,14 +25,16 @@ async function main() {
     update: {
       name: "Demo Owner",
       role: "OWNER",
-      passwordHash: hashPassword("demo-password-123")
+      passwordHash: hashPassword("demo-password-123"),
+      emailVerifiedAt: new Date()
     },
     create: {
       businessId: business.id,
       email: "owner@demo-shop.local",
       name: "Demo Owner",
       role: "OWNER",
-      passwordHash: hashPassword("demo-password-123")
+      passwordHash: hashPassword("demo-password-123"),
+      emailVerifiedAt: new Date()
     }
   });
 

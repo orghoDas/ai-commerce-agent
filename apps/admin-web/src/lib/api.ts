@@ -39,6 +39,32 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return apiSend<T>("PATCH", path, body);
 }
 
+export async function apiPostForm<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      ...(apiAuthToken ? { authorization: `Bearer ${apiAuthToken}` } : {})
+    },
+    body: formData
+  });
+
+  await assertOk(response);
+  return response.json() as Promise<T>;
+}
+
+export async function apiDelete<T = void>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    headers: requestHeaders()
+  });
+
+  await assertOk(response);
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  return response.json() as Promise<T>;
+}
+
 async function apiSend<T>(method: "POST" | "PATCH", path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
@@ -47,6 +73,9 @@ async function apiSend<T>(method: "POST" | "PATCH", path: string, body: unknown)
   });
 
   await assertOk(response);
+  if (response.status === 204) {
+    return undefined as T;
+  }
   return response.json() as Promise<T>;
 }
 

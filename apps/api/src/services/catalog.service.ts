@@ -1,6 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import type { ProductSearchMatch, ToolResult } from "@ai-commerce-agent/shared";
 import { prisma } from "../db/prisma.js";
+import { billingService } from "./billing.service.js";
+import type { StoredImage } from "./uploadStorage.service.js";
+import { uploadStorageService } from "./uploadStorage.service.js";
 
 type SearchProductsInput = {
   businessId: string;
@@ -102,6 +105,20 @@ type RecordUnavailableInput = {
   imageUrl?: string;
 };
 
+type AddProductImageInput = {
+  businessId: string;
+  productId: string;
+  storedImage: StoredImage;
+  altText?: string;
+  visibleText?: string;
+};
+
+type DeleteProductImageInput = {
+  businessId: string;
+  productId: string;
+  imageId: string;
+};
+
 export const catalogService = {
   async listProducts(businessId: string) {
     return prisma.product.findMany({
@@ -115,9 +132,11 @@ export const catalogService = {
       orderBy: { updatedAt: "desc" },
       take: 100
     });
-  },
+	  },
 
   async createProduct(input: CreateProductInput) {
+    await billingService.assertCanCreateProduct(input.businessId);
+
     return prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
@@ -168,9 +187,25 @@ export const catalogService = {
 
       return product;
     });
-  },
+	  },
 
   async updateProduct(input: UpdateProductInput) {
+    const existingProduct = await prisma.product.findFirst({
+      where: {
+        id: input.productId,
+        businessId: input.businessId
+      },
+      select: { id: true, status: true }
+    });
+
+    if (!existingProduct) {
+      throw new Error("PRODUCT_NOT_FOUND");
+    }
+
+    if (input.status === "ACTIVE" && existingProduct.status !== "ACTIVE") {
+      await billingService.assertCanCreateProduct(input.businessId);
+    }
+
     const product = await prisma.product.update({
       where: {
         id: input.productId,
@@ -324,7 +359,7 @@ export const catalogService = {
     });
   },
 
-  async importProductsCsv(input: ImportProductsCsvInput) {
+	  async importProductsCsv(input: ImportProductsCsvInput) {
     const parsedRows = parseProductCsv(input.csvText);
     const result = {
       totalRows: parsedRows.length,
@@ -388,6 +423,88 @@ export const catalogService = {
     });
 
     return result;
+  },
+
+  async addProductImage(input: AddProductImageInput) {
+    const product = await prisma.product.findFirst({
+      where: {
+        id: input.productId,
+        businessId: input.businessId
+      }
+    });
+
+    if (!product) {
+      throw new Error("PRODUCT_NOT_FOUND");
+    }
+
+    const image = await prisma.productImage.create({
+      data: {
+        businessId: input.businessId,
+        productId: input.productId,
+        url: input.storedImage.url,
+        storageKey: input.storedImage.storageKey,
+        mimeType: input.storedImage.mimeType,
+        sizeBytes: input.storedImage.sizeBytes,
+        width: input.storedImage.width,
+        height: input.storedImage.height,
+        altText: emptyToNull(input.altText),
+        visibleText: emptyToNull(input.visibleText),
+        averageColor: input.storedImage.averageColor,
+        perceptualHash: input.storedImage.perceptualHash,
+        colorSignature: input.storedImage.colorSignature
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        businessId: input.businessId,
+        actorType: "ADMIN",
+        action: "PRODUCT_UPDATED",
+        entityType: "ProductImage",
+        entityId: image.id,
+        metadata: {
+          productId: input.productId,
+          url: image.url
+        }
+      }
+    });
+
+    return image;
+  },
+
+  async deleteProductImage(input: DeleteProductImageInput) {
+    const image = await prisma.productImage.findFirst({
+      where: {
+        id: input.imageId,
+        businessId: input.businessId,
+        productId: input.productId
+      }
+    });
+
+    if (!image) {
+      throw new Error("PRODUCT_IMAGE_NOT_FOUND");
+    }
+
+    await prisma.productImage.delete({
+      where: { id: image.id }
+    });
+    await uploadStorageService.deleteStoredFile(image.storageKey);
+
+    await prisma.auditLog.create({
+      data: {
+        businessId: input.businessId,
+        actorType: "ADMIN",
+        action: "PRODUCT_UPDATED",
+        entityType: "ProductImage",
+        entityId: image.id,
+        metadata: {
+          productId: input.productId,
+          deleted: true
+        }
+      }
+    });
+
+    return { ok: true };
   },
 
   async searchProducts(input: SearchProductsInput): Promise<ToolResult<ProductSearchMatch[]>> {
@@ -646,6 +763,10 @@ async function findOrCreateImportedProduct(tx: Prisma.TransactionClient, busines
   });
 
   if (existingProduct) {
+    if (row.status === "ACTIVE" && existingProduct.status !== "ACTIVE") {
+      await billingService.assertCanCreateProduct(businessId);
+    }
+
     const product = await tx.product.update({
       where: { id: existingProduct.id },
       data: {
@@ -658,6 +779,10 @@ async function findOrCreateImportedProduct(tx: Prisma.TransactionClient, busines
       }
     });
     return { ...product, created: false };
+  }
+
+  if ((row.status ?? "ACTIVE") === "ACTIVE") {
+    await billingService.assertCanCreateProduct(businessId);
   }
 
   const product = await tx.product.create({

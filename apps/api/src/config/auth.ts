@@ -3,10 +3,11 @@ import { authService } from "../services/auth.service.js";
 
 export type AuthenticatedUser = {
   userId: string;
+  sessionId: string;
   businessId: string;
   role: "OWNER" | "ADMIN" | "AGENT" | "VIEWER";
-  email?: string;
-  name?: string | null;
+  email: string;
+  name: string | null;
 };
 
 declare module "fastify" {
@@ -23,7 +24,7 @@ export async function requireAuthenticatedUser(request: FastifyRequest, reply: F
     return reply.unauthorized("Authentication is required.");
   }
 
-  const user = authService.verifySessionToken(token);
+  const user = await authService.verifySessionToken(token);
   if (!user) {
     return reply.unauthorized("Session is invalid or expired.");
   }
@@ -42,10 +43,29 @@ export function assertCanWriteCatalog(user: AuthenticatedUser) {
   }
 }
 
+export function assertCanManageUsers(user: AuthenticatedUser) {
+  if (!["OWNER", "ADMIN"].includes(user.role)) {
+    throw new Error("FORBIDDEN");
+  }
+}
+
 export function assertCanViewReports(user: AuthenticatedUser) {
   if (!["OWNER", "ADMIN", "VIEWER"].includes(user.role)) {
     throw new Error("FORBIDDEN");
   }
+}
+
+export function requireRoles(roles: AuthenticatedUser["role"][], message = "You do not have permission for this action.") {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user;
+    if (!user) {
+      return reply.unauthorized("Authentication is required.");
+    }
+
+    if (!roles.includes(user.role)) {
+      return reply.forbidden(message);
+    }
+  };
 }
 
 function businessIdFromRequest(request: FastifyRequest) {

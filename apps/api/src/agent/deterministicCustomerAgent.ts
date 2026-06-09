@@ -2,6 +2,8 @@ import type { ProductSearchMatch } from "@ai-commerce-agent/shared";
 import { prisma } from "../db/prisma.js";
 import { catalogService } from "../services/catalog.service.js";
 import { conversationService } from "../services/conversation.service.js";
+import type { CustomerIdentityInput } from "../services/customerIdentity.service.js";
+import { imageSearchService } from "../services/imageSearch.service.js";
 import { inventoryService } from "../services/inventory.service.js";
 import { orderService } from "../services/order.service.js";
 
@@ -12,6 +14,7 @@ type DeterministicAgentInput = {
   conversationId?: string;
   customerMessage: string;
   imageUrl?: string;
+  customerIdentity?: CustomerIdentityInput;
 };
 
 type DeterministicState = {
@@ -39,7 +42,8 @@ type DeterministicTurn = {
 export async function runDeterministicCustomerAgent(input: DeterministicAgentInput) {
   const conversation = await conversationService.ensureConversation({
     businessId: input.businessId,
-    conversationId: input.conversationId
+    conversationId: input.conversationId,
+    customerIdentity: input.customerIdentity
   });
 
   const previousState = await loadState(input.businessId, conversation.id);
@@ -75,10 +79,7 @@ async function handleTurn(input: DeterministicAgentInput, state: DeterministicSt
   const text = input.customerMessage.trim();
 
   if (input.imageUrl) {
-    return {
-      message: "I can handle image search later, but for this no-LLM MVP please type the product name or model number.",
-      state: { step: "idle" }
-    };
+    return searchImageAndStartFlow(input.businessId, input.imageUrl, text);
   }
 
   if (isReset(text)) {
@@ -177,7 +178,7 @@ async function handleTurn(input: DeterministicAgentInput, state: DeterministicSt
       };
     }
 
-    return createOrder(input.businessId, input.conversationId, state);
+    return createOrder(input.businessId, input.conversationId, input.customerIdentity, state);
   }
 
   return searchAndStartFlow(input.businessId, text);
@@ -230,6 +231,50 @@ async function searchAndStartFlow(businessId: string, text: string): Promise<Det
   }
 
   return presentAvailability(businessId, singleMatch, quantity, text);
+}
+
+async function searchImageAndStartFlow(businessId: string, imageUrl: string, text: string): Promise<DeterministicTurn> {
+  const quantity = extractQuantity(text) ?? 1;
+  const searchResult = await imageSearchService.searchByImage({
+    businessId,
+    imageUrl,
+    customerHint: text && !/identify this product/i.test(text) ? text : undefined,
+    limit: 3
+  });
+
+  if (!searchResult.ok || searchResult.data.length === 0) {
+    await catalogService.recordUnavailableRequest({
+      businessId,
+      rawQuery: text || "image search",
+      requestedQty: quantity,
+      imageUrl
+    });
+    return {
+      message: "Sorry, I could not match that image to an in-stock catalog product right now.",
+      state: { step: "idle" }
+    };
+  }
+
+  if (searchResult.data.length > 1) {
+    return {
+      message: formatMatches("I found a few products that look similar. Which one do you mean?", searchResult.data),
+      state: {
+        step: "select_product",
+        matches: searchResult.data,
+        quantity
+      }
+    };
+  }
+
+  const singleMatch = searchResult.data[0];
+  if (!singleMatch) {
+    return {
+      message: "Sorry, I could not match that image to an in-stock catalog product right now.",
+      state: { step: "idle" }
+    };
+  }
+
+  return presentAvailability(businessId, singleMatch, quantity, text || "image search");
 }
 
 async function presentAvailability(
@@ -299,6 +344,7 @@ async function presentAvailability(
 async function createOrder(
   businessId: string,
   conversationId: string | undefined,
+  customerIdentity: CustomerIdentityInput | undefined,
   state: DeterministicState
 ): Promise<DeterministicTurn> {
   if (!state.selectedMatch?.variantId || !state.quantity || !state.customerName || !state.customerPhone || !state.deliveryAddress) {
@@ -311,6 +357,7 @@ async function createOrder(
   const order = await orderService.createPendingOrder({
     businessId,
     conversationId,
+    customerIdentity,
     customerName: state.customerName,
     customerPhone: state.customerPhone,
     deliveryAddress: state.deliveryAddress,

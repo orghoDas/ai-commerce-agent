@@ -1,13 +1,17 @@
 import type { OrderStatus } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { canTransitionOrder } from "../domain/orderState.js";
+import type { CustomerIdentityInput } from "./customerIdentity.service.js";
+import { customerIdentityService } from "./customerIdentity.service.js";
 
 type CreatePendingOrderInput = {
   businessId: string;
   conversationId?: string;
   customerId?: string;
+  customerIdentity?: CustomerIdentityInput;
   customerName?: string;
   customerPhone?: string;
+  customerEmail?: string;
   deliveryAddress?: string;
   notes?: string;
   items: Array<{
@@ -25,6 +29,7 @@ type UpdateOrderStatusInput = {
   businessId: string;
   orderId: string;
   status: OrderStatus;
+  actorId?: string;
 };
 
 export const orderService = {
@@ -36,7 +41,7 @@ export const orderService = {
 
     return prisma.order.findMany({
       where,
-      include: { items: true },
+      include: { items: true, customer: true },
       orderBy: { createdAt: "desc" },
       take: 100
     });
@@ -48,6 +53,9 @@ export const orderService = {
     }
 
     try {
+      const linkedCustomer = await linkOrderCustomer(input);
+      const customerId = input.customerId ?? linkedCustomer?.id;
+
       const result = await prisma.$transaction(async (tx) => {
         const variants = await tx.productVariant.findMany({
           where: {
@@ -111,7 +119,7 @@ export const orderService = {
           data: {
             businessId: input.businessId,
             conversationId: input.conversationId,
-            customerId: input.customerId,
+            customerId,
             orderNumber,
             customerName: input.customerName,
             customerPhone: input.customerPhone,
@@ -148,7 +156,7 @@ export const orderService = {
               businessId: input.businessId,
               variantId: item.variantId,
               quantity: item.quantity,
-              customerId: input.customerId,
+              customerId,
               orderId: order.id,
               expiresAt
             }
@@ -290,6 +298,7 @@ export const orderService = {
           data: {
             businessId: input.businessId,
             actorType: "ADMIN",
+            actorId: input.actorId,
             action: "ORDER_UPDATED",
             entityType: "Order",
             entityId: input.orderId,
@@ -336,4 +345,17 @@ function messageForOrderStatusError(code: string) {
     default:
       return "Could not update the order status.";
   }
+}
+
+async function linkOrderCustomer(input: CreatePendingOrderInput) {
+  return customerIdentityService.linkCustomer({
+    businessId: input.businessId,
+    conversationId: input.conversationId,
+    externalId: input.customerIdentity?.externalId,
+    name: input.customerName ?? input.customerIdentity?.name,
+    phone: input.customerPhone ?? input.customerIdentity?.phone,
+    email: input.customerEmail ?? input.customerIdentity?.email,
+    defaultAddress: input.deliveryAddress ?? input.customerIdentity?.defaultAddress,
+    actorType: "AGENT"
+  });
 }

@@ -4,6 +4,7 @@ import { customerAgentTools } from "./toolSchemas.js";
 import { runCustomerTool } from "./toolRouter.js";
 import { defaultModel, openai } from "../integrations/openai.js";
 import { conversationService } from "../services/conversation.service.js";
+import type { CustomerIdentityInput } from "../services/customerIdentity.service.js";
 
 const MAX_TOOL_ROUNDS = 6;
 
@@ -12,12 +13,14 @@ type CustomerAgentInput = {
   conversationId?: string;
   customerMessage: string;
   imageUrl?: string;
+  customerIdentity?: CustomerIdentityInput;
 };
 
 export async function runCustomerAgent(input: CustomerAgentInput) {
   const conversation = await conversationService.ensureConversation({
     businessId: input.businessId,
-    conversationId: input.conversationId
+    conversationId: input.conversationId,
+    customerIdentity: input.customerIdentity
   });
 
   await conversationService.addMessage({
