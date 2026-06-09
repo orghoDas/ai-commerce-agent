@@ -1,112 +1,363 @@
-# AI Commerce Agent SaaS Scaffold
+# AI Commerce Agent SaaS
 
-This scaffold is a structured starter kit for a sellable AI agent service for businesses. The agent handles customer product questions, stock checks, pricing, order intake, and admin reporting.
+Working MVP for a sellable commerce chat-agent service. The product currently supports a deterministic no-LLM customer flow, admin authentication, catalog/inventory management, order workflow, conversation takeover, reports, CSV import, and local billing/subscription scaffolding.
 
-The main principle:
+Core principle:
 
 ```text
-AI handles conversation.
-Backend handles truth.
+Conversation can be automated.
+Catalog, inventory, order, auth, and billing truth must live in the backend.
 ```
 
-The model should never invent product availability, prices, order status, or business policies. It must call backend tools that read and write trusted data.
+## Current Features
 
-## What Is Included
+- Customer chat widget connected to the real `/v1/chat` endpoint.
+- No-LLM deterministic sales flow:
+  - greet customer
+  - fuzzy product search
+  - check stock
+  - quote price
+  - collect name, phone, address
+  - create pending order
+  - reserve inventory
+- Optional OpenAI agent path with tool calling.
+- Admin login with signed session token.
+- Protected `/v1/admin/*` API routes.
+- Product and variant CRUD.
+- Inventory edit and stock/reorder management.
+- CSV product import from admin UI or CLI.
+- Order queue with confirm, cancel, and fulfill actions.
+- Conversation viewer with full transcript and linked orders.
+- Human takeover:
+  - take over/release conversation
+  - send admin replies
+  - close conversations
+  - customer widget polls transcript for admin replies
+  - bot pauses while takeover is active
+- Daily, weekly, and monthly reports.
+- Billing/subscription foundation:
+  - Starter/Growth/Scale plans
+  - local subscription model
+  - usage counters
+  - manual plan/status updates
+- Daily report job scaffold.
+- PostgreSQL/Prisma persistence.
+
+## Monorepo Layout
 
 ```text
 apps/
-  api/                  Fastify API, agent orchestration, tools, services, jobs
-  admin-web/            Vite React admin dashboard scaffold
-  customer-widget/      Vite customer chat widget scaffold
+  api/                  Fastify API, services, agent flows, admin/customer routes
+  admin-web/            Vite React admin dashboard
+  customer-widget/      Vite React customer chat widget
 packages/
-  shared/               Shared contracts and DTOs
+  shared/               Shared types and schemas
 prisma/
-  schema.prisma         Multi-tenant commerce data model
+  schema.prisma         Commerce, conversation, auth, billing data model
+  migrations/           Applied database migrations
+scripts/
+  seed-demo.ts          Seeds demo shop, owner, product, inventory, billing
+  import-products-csv.ts
 docs/
   Product, architecture, roadmap, edge cases, security, reporting, pricing
-tests/
-  api/                  Test placeholders for high-risk workflows
-scripts/
-  Seed/import placeholders
 ```
 
-## MVP Scope
+## Prerequisites
 
-Build this first:
+- Node.js 22+ recommended.
+- PostgreSQL running locally.
+- npm workspaces.
 
-1. Business admin can create products, variants, prices, and inventory.
-2. Customer can use a website chat widget.
-3. Agent can search products, check stock, quote prices, and create pending orders.
-4. Backend reserves inventory before confirming an order.
-5. Admin sees orders and inventory status.
-6. Daily report is generated per business.
+Docker Compose exists, but this local setup has mostly been run with Homebrew PostgreSQL on macOS.
 
-Add WhatsApp, Instagram, image search, payments, POS integrations, and delivery tracking after the MVP proves reliable.
+## Environment
 
-## Suggested Stack
-
-- API: Node.js, TypeScript, Fastify
-- Agent: OpenAI Responses API or Agents SDK with tool calling
-- Database: PostgreSQL
-- ORM: Prisma
-- Admin web: Vite React
-- Queue/jobs: BullMQ, Temporal, or a managed scheduled job
-- Billing: Stripe Billing
-- Messaging later: WhatsApp Cloud API, Twilio, Instagram Messaging API
-
-## Local Setup
-
-This scaffold is intentionally code-ready but not dependency-installed.
+Create a root `.env`:
 
 ```bash
-npm install
 cp .env.example .env
-npm run db:generate
-npm run db:migrate
-npm run seed
-npm run dev
 ```
 
-If you use Homebrew PostgreSQL on macOS instead of Docker, your `DATABASE_URL` will usually use your macOS username:
+For Homebrew PostgreSQL on macOS, `DATABASE_URL` usually looks like:
 
 ```bash
 DATABASE_URL=postgresql://your_mac_username@localhost:5432/ai_commerce_agent
 ```
 
-The seed script prints the demo `businessId`; use that id in admin API calls.
-The admin dashboard also accepts `VITE_BUSINESS_ID` in `apps/admin-web/.env`.
-The customer widget accepts the same `VITE_BUSINESS_ID` in `apps/customer-widget/.env`.
-
-## Chat Provider Modes
-
-Use the no-LLM deterministic MVP flow while you are building product/order logic:
+Important values:
 
 ```bash
 AI_PROVIDER=deterministic
+JWT_SECRET=replace_me_with_long_random_secret
+OPENAI_API_KEY=replace_me
 ```
 
-Switch back to OpenAI later when your API billing/quota is ready:
+Use `AI_PROVIDER=deterministic` for the free MVP flow. Switch to `AI_PROVIDER=openai` only when you are ready to use a paid model API.
+
+Optional app env files:
 
 ```bash
-AI_PROVIDER=openai
-OPENAI_API_KEY=your_key
+cp apps/admin-web/.env.example apps/admin-web/.env
+cp apps/customer-widget/.env.example apps/customer-widget/.env
 ```
 
-## Critical Implementation Rules
+## Install And Database Setup
 
-- Always scope reads and writes by `businessId`.
-- Never confirm orders from model text alone.
-- Always re-check and reserve inventory inside a transaction.
-- Log every order-impacting action in `AuditLog`.
-- Store conversation history, but do not store sensitive payment data.
-- Use human handoff for low confidence, angry customers, policy exceptions, or repeated failed tool calls.
+```bash
+npm install
+npm run db:generate
+npm run db:migrate
+npm run seed
+```
 
-## Next Engineering Milestones
+The seed creates:
 
-1. Wire Prisma client and migrations.
-2. Implement catalog CRUD in `apps/api/src/services/catalog.service.ts`.
-3. Implement transactional inventory reservation in `apps/api/src/services/inventory.service.ts`.
-4. Connect OpenAI tool calling in `apps/api/src/agent/customerAgent.ts`.
-5. Build admin dashboard pages for products, inventory, orders, and reports.
-6. Add automated daily report job.
-7. Add billing and tenant limits.
+- Business: `Demo Shop`
+- Business slug: `demo-shop`
+- Demo owner email: `owner@demo-shop.local`
+- Demo owner password: `demo-password-123`
+- Demo product: `Wireless Headphones`
+- Starter trial subscription
+
+## Run Locally
+
+Use separate terminals:
+
+```bash
+npm run dev:api
+npm run dev:admin
+npm run dev:widget
+```
+
+URLs:
+
+- API: `http://localhost:4000`
+- Admin dashboard: `http://localhost:3000`
+- Customer widget: `http://localhost:5173`
+
+Admin login:
+
+```text
+Email: owner@demo-shop.local
+Password: demo-password-123
+Business slug: demo-shop
+```
+
+## Useful Commands
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npm run db:studio
+```
+
+CSV import from CLI:
+
+```bash
+npm run import:products -- products.csv <businessId>
+```
+
+For the seeded demo business:
+
+```bash
+npm run import:products -- products.csv cmq4w4tnf0000rt4rfr38t93b
+```
+
+If your seeded `businessId` differs, use the value printed by `npm run seed`.
+
+## CSV Product Import
+
+Admin UI location:
+
+```text
+Admin Dashboard -> Product And Inventory -> CSV Product Import
+```
+
+API endpoint:
+
+```http
+POST /v1/admin/products/import-csv
+```
+
+Supported columns:
+
+```text
+name,sku,variantTitle,price,stockOnHand,reorderPoint,brand,category,description,tags,searchKeywords,color,size,currency,productStatus,variantActive
+```
+
+Minimal example:
+
+```csv
+name,sku,variantTitle,price,stockOnHand,reorderPoint,brand,category,tags,searchKeywords,color,size,currency,productStatus,variantActive
+Wireless Headphones,WH-1000XM5-BLK,Black,349.00,12,3,Sony,Audio,headphones|wireless,sony|black,Black,,USD,ACTIVE,true
+```
+
+Behavior:
+
+- Existing SKU updates product, variant, price, stock, and reorder point.
+- New SKU creates product/variant/inventory.
+- Row-level validation errors are returned without failing the whole import.
+- Import limit is 500 rows per request.
+- `tags` and `searchKeywords` can be split with `|`, `;`, or `,`.
+
+## API Overview
+
+Public:
+
+```http
+GET  /health
+POST /v1/chat
+GET  /v1/chat/:conversationId/messages
+```
+
+Auth:
+
+```http
+POST /v1/auth/login
+GET  /v1/auth/me
+```
+
+Admin routes require:
+
+```http
+Authorization: Bearer <token>
+```
+
+Admin products:
+
+```http
+GET   /v1/admin/products?businessId=...
+POST  /v1/admin/products
+PATCH /v1/admin/products/:productId
+POST  /v1/admin/products/:productId/variants
+PATCH /v1/admin/products/:productId/variants/:variantId
+POST  /v1/admin/products/search
+POST  /v1/admin/products/import-csv
+```
+
+Admin orders:
+
+```http
+GET   /v1/admin/orders?businessId=...
+PATCH /v1/admin/orders/:orderId/status
+```
+
+Admin conversations:
+
+```http
+GET   /v1/admin/conversations?businessId=...
+GET   /v1/admin/conversations/:conversationId?businessId=...
+POST  /v1/admin/conversations/:conversationId/handoff
+POST  /v1/admin/conversations/:conversationId/messages
+PATCH /v1/admin/conversations/:conversationId/status
+```
+
+Admin reports:
+
+```http
+GET /v1/admin/reports?businessId=...&period=daily&date=YYYY-MM-DD
+GET /v1/admin/reports/daily?businessId=...&date=YYYY-MM-DD
+GET /v1/admin/reports/weekly?businessId=...&date=YYYY-MM-DD
+GET /v1/admin/reports/monthly?businessId=...&date=YYYY-MM-DD
+```
+
+Admin billing:
+
+```http
+GET   /v1/admin/billing?businessId=...
+PATCH /v1/admin/billing/subscription
+```
+
+Webhook placeholder:
+
+```http
+POST /v1/webhooks/stripe
+```
+
+## Human Takeover Flow
+
+1. Admin opens Conversation Viewer.
+2. Admin clicks `Take Over`.
+3. Conversation status becomes `NEEDS_HUMAN`.
+4. Customer messages are stored, but the bot does not answer.
+5. Admin sends replies from the dashboard.
+6. Customer widget polls `/v1/chat/:conversationId/messages` and displays admin replies.
+7. Admin can `Release` the conversation back to the agent or `Close` it.
+
+## Billing State
+
+Billing is currently local/manual, not connected to a payment provider.
+
+Current plan ids:
+
+```text
+STARTER
+GROWTH
+SCALE
+```
+
+The Billing panel shows:
+
+- current plan
+- subscription status
+- monthly price
+- renewal status
+- usage counters
+- plan selection controls
+
+Stripe/Paddle can be added later by using the existing `BillingSubscription` model and webhook placeholder.
+
+## Deterministic Customer Agent
+
+The deterministic mode is the default MVP path. It avoids paid LLM calls while proving core commerce logic.
+
+Flow:
+
+```text
+customer message
+-> product search
+-> stock check
+-> quote price
+-> collect customer details
+-> final confirmation
+-> create pending order
+-> reserve inventory
+```
+
+Image search currently responds with a typed-product fallback in deterministic mode. The OpenAI path has image-search tool scaffolding, but production image matching still needs a real storage/vision/embedding pipeline.
+
+## Testing And Verification
+
+Current known-good checks:
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```
+
+The API service tests cover the current high-risk inventory/order logic.
+
+## Security Notes
+
+- Admin APIs are protected by signed session tokens.
+- Admin requests are scoped to the authenticated user's `businessId`.
+- Customer chat remains public because it is intended to be embedded.
+- Payment details are not stored.
+- `JWT_SECRET` must be changed before any real deployment.
+- Demo password is only for local development.
+
+## Still To Do Before Selling
+
+- Replace local auth with production-grade sessions, password reset, invite flow, and rate limiting.
+- Connect Stripe/Paddle for real checkout, subscription lifecycle, and webhook verification.
+- Add tenant limits and billing enforcement.
+- Add file/image upload storage.
+- Add real image product search.
+- Add WhatsApp/Instagram/SMS channels.
+- Add audit-log UI.
+- Add customer identity linking.
+- Add stronger admin role permissions per route.
+- Add more tests for CSV import, auth, human takeover, and billing.
+- Add deployment config and CI.
