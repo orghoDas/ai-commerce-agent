@@ -63,6 +63,26 @@ type LoginResponse = AuthSession & {
 
 type AuthMode = "login" | "reset-request" | "reset-confirm" | "accept-invite";
 
+type AdminPageId =
+  | "dashboard"
+  | "reports"
+  | "billing"
+  | "security"
+  | "audit"
+  | "products"
+  | "inventory"
+  | "orders"
+  | "conversations"
+  | "agent-controls";
+
+type AdminPageMeta = {
+  id: AdminPageId;
+  label: string;
+  title: string;
+  subtitle: string;
+  requiresAudit?: boolean;
+};
+
 type LoginFormState = {
   email: string;
   password: string;
@@ -473,6 +493,72 @@ const AUDIT_ACTIONS: Array<{ label: string; value: AuditAction }> = [
   { label: "Billing Updated", value: "BILLING_UPDATED" }
 ];
 
+const ADMIN_PAGES: AdminPageMeta[] = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    title: "Operations Dashboard",
+    subtitle: "A quick pulse check for products, conversations, and orders."
+  },
+  {
+    id: "reports",
+    label: "Reports",
+    title: "Reports",
+    subtitle: "Daily, weekly, and monthly summaries for stock, orders, and demand."
+  },
+  {
+    id: "billing",
+    label: "Billing",
+    title: "Billing",
+    subtitle: "Manage plan limits, subscription status, and usage."
+  },
+  {
+    id: "security",
+    label: "Security",
+    title: "Account Security",
+    subtitle: "Manage sessions, password recovery, and team invites."
+  },
+  {
+    id: "audit",
+    label: "Audit",
+    title: "Audit Log",
+    subtitle: "Review important admin and system actions.",
+    requiresAudit: true
+  },
+  {
+    id: "products",
+    label: "Products",
+    title: "Products",
+    subtitle: "Import, create, and organize catalog items."
+  },
+  {
+    id: "inventory",
+    label: "Inventory",
+    title: "Inventory",
+    subtitle: "Update prices, stock levels, reorder points, and product status."
+  },
+  {
+    id: "orders",
+    label: "Orders",
+    title: "Order Queue",
+    subtitle: "Confirm, cancel, or fulfill customer orders."
+  },
+  {
+    id: "conversations",
+    label: "Conversations",
+    title: "Conversation Viewer",
+    subtitle: "Review customer transcripts and handle human takeover."
+  },
+  {
+    id: "agent-controls",
+    label: "Agent Controls",
+    title: "Agent Controls",
+    subtitle: "Monitor handoffs, failed actions, and pending order pressure."
+  }
+];
+
+const ADMIN_PAGE_IDS = new Set<AdminPageId>(ADMIN_PAGES.map((page) => page.id));
+
 const PRODUCT_IMPORT_TEMPLATE = [
   "name,sku,variantTitle,price,stockOnHand,reorderPoint,brand,category,tags,searchKeywords,color,size,currency,productStatus,variantActive",
   "Wireless Headphones,WH-1000XM5-BLK,Black,349.00,12,3,Sony,Audio,headphones|wireless,sony|black,Black,,USD,ACTIVE,true"
@@ -563,6 +649,7 @@ export default function DashboardPage() {
   const [csvImportResult, setCsvImportResult] = useState<ProductImportResult | null>(null);
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const [isImportingProducts, setIsImportingProducts] = useState(false);
+  const [activePage, setActivePage] = useState<AdminPageId>(() => readAdminPageFromLocation());
   const businessId = authSession?.user.businessId ?? DEMO_BUSINESS_ID;
   const canManageUsers = authSession?.user.role === "OWNER" || authSession?.user.role === "ADMIN";
   const canViewAudit = authSession?.user.role === "OWNER" || authSession?.user.role === "ADMIN";
@@ -882,6 +969,16 @@ export default function DashboardPage() {
       void refreshAll();
     }
   }, [authSession?.user.businessId]);
+
+  useEffect(() => {
+    const syncRoute = () => setActivePage(readAdminPageFromLocation());
+    window.addEventListener("popstate", syncRoute);
+    window.addEventListener("hashchange", syncRoute);
+    return () => {
+      window.removeEventListener("popstate", syncRoute);
+      window.removeEventListener("hashchange", syncRoute);
+    };
+  }, []);
 
   async function createProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1246,6 +1343,19 @@ export default function DashboardPage() {
     ],
     [confirmedOrders, inventorySummary, openConversations, pendingOrders, products]
   );
+  const visibleAdminPages = useMemo(() => ADMIN_PAGES.filter((page) => !page.requiresAudit || canViewAudit), [canViewAudit]);
+  const activePageMeta = useMemo(
+    () => visibleAdminPages.find((page) => page.id === activePage) ?? ADMIN_PAGES[0]!,
+    [activePage, visibleAdminPages]
+  );
+  const showProductManagement = activePage === "products";
+  const showInventoryManagement = activePage === "products" || activePage === "inventory";
+
+  useEffect(() => {
+    if (authSession && !visibleAdminPages.some((page) => page.id === activePage)) {
+      navigateAdminPage("dashboard");
+    }
+  }, [activePage, authSession, visibleAdminPages]);
 
   if (isCheckingAuth) {
     return (
@@ -1411,28 +1521,44 @@ export default function DashboardPage() {
     );
   }
 
+  function navigateAdminPage(pageId: AdminPageId) {
+    setActivePage(pageId);
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextPath = pathForAdminPage(pageId);
+    if (window.location.pathname !== nextPath || window.location.hash) {
+      window.history.pushState({}, "", nextPath);
+    }
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">AI Commerce Agent</div>
         <nav className="nav" aria-label="Admin navigation">
-          <a href="#">Dashboard</a>
-          <a href="#">Products</a>
-          <a href="#">Inventory</a>
-          <a href="#">Orders</a>
-          <a href="#">Conversations</a>
-          <a href="#">Reports</a>
-          <a href="#">Billing</a>
-          <a href="#">Audit</a>
-          <a href="#">Settings</a>
+          {visibleAdminPages.map((page) => (
+            <a
+              className={activePage === page.id ? "active" : ""}
+              href={pathForAdminPage(page.id)}
+              key={page.id}
+              onClick={(event) => {
+                event.preventDefault();
+                navigateAdminPage(page.id);
+              }}
+            >
+              {page.label}
+            </a>
+          ))}
         </nav>
       </aside>
 
       <main className="main">
         <section className="topbar">
           <div>
-            <h1>Operations Dashboard</h1>
-            <p>Manage catalog, stock, and pending orders for the deterministic sales assistant.</p>
+            <h1>{activePageMeta.title}</h1>
+            <p>{activePageMeta.subtitle}</p>
           </div>
           <div className="topbarActions">
             <span className="sessionBadge">
@@ -1453,16 +1579,19 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="metrics" aria-label="Business metrics">
-          {metrics.map((metric) => (
-            <div className="metric" key={metric.label}>
-              <span>{metric.label}</span>
-              <strong>{metric.value}</strong>
-            </div>
-          ))}
-        </section>
+        {activePage === "dashboard" ? (
+          <section className="metrics" aria-label="Business metrics">
+            {metrics.map((metric) => (
+              <div className="metric" key={metric.label}>
+                <span>{metric.label}</span>
+                <strong>{metric.value}</strong>
+              </div>
+            ))}
+          </section>
+        ) : null}
 
-        <section className="panel">
+        {activePage === "reports" ? (
+          <section className="panel" id="reports">
           <header className="reportHeader">
             <div>
               <h2>
@@ -1684,9 +1813,11 @@ export default function DashboardPage() {
           ) : (
             <div className="empty">Loading report.</div>
           )}
-        </section>
+          </section>
+        ) : null}
 
-        <section className="panel">
+        {activePage === "billing" ? (
+          <section className="panel" id="billing">
           <header className="reportHeader">
             <div>
               <h2>
@@ -1790,9 +1921,11 @@ export default function DashboardPage() {
           ) : (
             <div className="empty">Loading billing.</div>
           )}
-        </section>
+          </section>
+        ) : null}
 
-        <section className="panel">
+        {activePage === "security" ? (
+          <section className="panel" id="security">
           <header className="reportHeader">
             <div>
               <h2>
@@ -1907,10 +2040,11 @@ export default function DashboardPage() {
               </div>
             ) : null}
           </div>
-        </section>
+          </section>
+        ) : null}
 
-        {canViewAudit ? (
-          <section className="panel">
+        {activePage === "audit" && canViewAudit ? (
+          <section className="panel" id="audit">
             <header className="reportHeader">
               <div>
                 <h2>
@@ -1986,17 +2120,26 @@ export default function DashboardPage() {
           </section>
         ) : null}
 
-        <section className="panel">
+        {showInventoryManagement ? (
+          <section className="panel" id={activePage === "inventory" ? "inventory" : "products"}>
           <header>
             <h2>
-              <Package size={18} aria-hidden="true" /> Product And Inventory
+              <Package size={18} aria-hidden="true" /> {activePage === "inventory" ? "Inventory" : "Products"}
             </h2>
-            <span className="subtle">{isLoadingProducts ? "Loading" : `${products.length} products`}</span>
+            <span className="subtle">
+              {isLoadingProducts
+                ? "Loading"
+                : activePage === "inventory"
+                  ? `${inventorySummary.lowStock} low stock / ${inventorySummary.outOfStock} out of stock`
+                  : `${products.length} products`}
+            </span>
           </header>
 
           {productsError ? <div className="empty dangerText">{productsError}</div> : null}
           {saveMessage ? <div className="notice">{saveMessage}</div> : null}
 
+          {showProductManagement ? (
+            <>
           <form className="importBand" onSubmit={(event) => void importProductsCsv(event)}>
             <div className="importHeader">
               <h3>
@@ -2231,6 +2374,8 @@ export default function DashboardPage() {
               </button>
             </form>
           </div>
+            </>
+          ) : null}
 
           <div className="tableWrap">
             <table className="table">
@@ -2352,9 +2497,11 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
-        </section>
+          </section>
+        ) : null}
 
-        <section className="panel">
+        {activePage === "orders" ? (
+          <section className="panel" id="orders">
           <header>
             <h2>
               <ShoppingCart size={18} aria-hidden="true" /> Order Queue
@@ -2448,9 +2595,11 @@ export default function DashboardPage() {
               </table>
             </div>
           ) : null}
-        </section>
+          </section>
+        ) : null}
 
-        <section className="panel">
+        {activePage === "conversations" ? (
+          <section className="panel" id="conversations">
           <header>
             <h2>
               <MessageSquare size={18} aria-hidden="true" /> Conversation Viewer
@@ -2590,9 +2739,11 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : null}
-        </section>
+          </section>
+        ) : null}
 
-        <section className="grid">
+        {activePage === "agent-controls" ? (
+          <section className="grid" id="agent-controls">
           <div className="panel">
             <header>
               <h2>
@@ -2622,7 +2773,8 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
-        </section>
+          </section>
+        ) : null}
       </main>
     </div>
   );
@@ -2774,6 +2926,28 @@ function initialTokenParam(name: string) {
     return "";
   }
   return new URLSearchParams(window.location.search).get(name) ?? "";
+}
+
+function pathForAdminPage(pageId: AdminPageId) {
+  return pageId === "dashboard" ? "/" : `/${pageId}`;
+}
+
+function readAdminPageFromLocation(): AdminPageId {
+  if (typeof window === "undefined") {
+    return "dashboard";
+  }
+
+  const pathPage = window.location.pathname.replace(/^\/+|\/+$/g, "");
+  if (ADMIN_PAGE_IDS.has(pathPage as AdminPageId)) {
+    return pathPage as AdminPageId;
+  }
+
+  const hashPage = window.location.hash.replace(/^#/, "");
+  if (ADMIN_PAGE_IDS.has(hashPage as AdminPageId)) {
+    return hashPage as AdminPageId;
+  }
+
+  return "dashboard";
 }
 
 function centsToDollars(cents: number) {

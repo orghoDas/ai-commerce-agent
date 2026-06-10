@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: var(--background);
@@ -128,6 +132,10 @@ textarea {
   background: #101828;
   color: #f9fafb;
   padding: 24px 18px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .brand {
@@ -148,9 +156,12 @@ textarea {
   border-radius: 6px;
 }
 
-.nav a:first-child {
+.nav a.active,
+.nav a:hover,
+.nav a:focus-visible {
   background: #1d2939;
   color: #ffffff;
+  outline: none;
 }
 
 .main {
@@ -158,6 +169,10 @@ textarea {
   display: grid;
   gap: 24px;
   align-content: start;
+}
+
+.main section {
+  scroll-margin-top: 18px;
 }
 
 .topbar {

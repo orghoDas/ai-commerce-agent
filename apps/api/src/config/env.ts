@@ -9,7 +9,20 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   APP_BASE_URL: z.string().url().default("http://localhost:4000"),
   ADMIN_WEB_URL: z.string().url().default("http://localhost:3000"),
-  CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:5174"),
+  CORS_ORIGINS: z
+    .string()
+    .default(
+      [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174"
+      ].join(",")
+    ),
   DATABASE_URL: z.string().min(1),
   AI_PROVIDER: z.enum(["deterministic", "openai"]).default("deterministic"),
   OPENAI_API_KEY: z.string().default("replace_me"),
